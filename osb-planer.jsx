@@ -712,6 +712,9 @@ export default function OSBPlaner() {
   const [isPanning, setIsPanning] = useState(false);
   const panRef = useRef(null);  // hält Start-Offsets während Drag
 
+  // Mobile-Layout: Sidebar als Drawer, Stat-Panel als Bottom-Sheet
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [mobileStatsOpen, setMobileStatsOpen] = useState(false);
   // Pen-Modus: Click-to-add mit 45°-Snap und Live-Preview
   const [penMode, setPenMode] = useState(false);
   const [penCursor, setPenCursor] = useState(null);  // { x, y } in SVG-Userspace
@@ -1538,6 +1541,19 @@ export default function OSBPlaner() {
   return (
     <div className="paper-theme w-full h-screen flex flex-col" style={{ color: 'var(--ink)' }}>
       <header className="d-topbar">
+        <button
+          className="d-hamburger d-icon-btn"
+          onClick={() => setMobileDrawerOpen(v => !v)}
+          aria-label="Menü"
+        >
+          {/* Hamburger-Icon (3 Striche) */}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18 }}>
+            <line x1="3" y1="6"  x2="21" y2="6" />
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
+
         <div className="d-brand">
           <div className="d-brand-mark">V</div>
           <div>
@@ -1547,16 +1563,16 @@ export default function OSBPlaner() {
         </div>
 
         <div className="d-mode-toggle">
-          <button onClick={() => setMode('zeichnen')} className={mode === 'zeichnen' ? 'on' : ''}>
-            <Edit3 size={15} /> Zeichnen
+          <button onClick={() => { setMode('zeichnen'); setMobileDrawerOpen(false); }} className={mode === 'zeichnen' ? 'on' : ''}>
+            <Edit3 size={15} /><span> Zeichnen</span>
           </button>
           <button
-            onClick={() => setMode('parameter')}
+            onClick={() => { setMode('parameter'); setMobileDrawerOpen(false); }}
             className={mode === 'parameter' ? 'on' : ''}
             disabled={!polygonGeschlossen}
             title={!polygonGeschlossen ? 'Polygon zuerst schließen' : ''}
           >
-            <Sliders size={15} /> Parameter
+            <Sliders size={15} /><span> Parameter</span>
           </button>
         </div>
 
@@ -1593,12 +1609,16 @@ export default function OSBPlaner() {
               e.target.value = '';
             }}
           />
-          <button onClick={exportSVG} className="d-btn primary" title="SVG exportieren"><Download size={15} />Drucken</button>
+          <button onClick={exportSVG} className="d-btn primary" title="SVG exportieren"><Download size={15} /><span className="d-mobile-text">Drucken</span></button>
         </div>
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        <aside className="w-96 bg-slate-900 border-r border-slate-800 overflow-y-auto">
+        <div
+          className={`mobile-drawer-overlay ${mobileDrawerOpen ? 'open' : ''}`}
+          onClick={() => setMobileDrawerOpen(false)}
+        />
+        <aside className={`w-96 bg-slate-900 border-r border-slate-800 overflow-y-auto mobile-drawer-host ${mobileDrawerOpen ? 'open' : ''}`}>
 
           {mode === 'zeichnen' && (
             <>
@@ -2385,7 +2405,15 @@ export default function OSBPlaner() {
           </svg>
 
           {mode === 'parameter' && plattenPlan.stats && (
-            <div className="absolute top-4 right-4 w-80 flex flex-col gap-3 max-h-[calc(100vh-130px)] overflow-y-auto">
+            <div
+              className={`absolute top-4 right-4 w-80 flex flex-col gap-3 max-h-[calc(100vh-130px)] overflow-y-auto mobile-statsheet ${mobileStatsOpen ? 'open' : ''}`}
+            >
+              {/* Mobile-Sheet-Handle: Tap toggelt Auf/Zu (nur sichtbar im Media-Query) */}
+              <div
+                className="mobile-sheet-handle"
+                onClick={() => setMobileStatsOpen(v => !v)}
+                aria-label="Auswertung erweitern"
+              />
               {/* ==== STAT HERO (Zu kaufen) ==== */}
               <div className="d-stat-hero">
                 <div className="d-lbl">Zu kaufen</div>

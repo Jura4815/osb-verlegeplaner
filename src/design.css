@@ -386,3 +386,124 @@ body {
 .paper-theme .bg-emerald-900\/40 { background: var(--green-bg) !important; }
 .paper-theme .bg-emerald-800\/60 { background: color-mix(in srgb, var(--green-bg) 70%, var(--card)) !important; }
 .paper-theme .border-emerald-700\/50 { border-color: var(--green) !important; }
+
+/* ==========================================================================
+   MOBILE OPTIMIZATIONS  (<= 768 px)
+   ========================================================================== */
+
+/* Hamburger sichtbar nur auf Mobile */
+.d-hamburger { display: none; }
+
+/* Mobile-Sheet-Handle: Greifer fürs Hochziehen — default hidden, im Media-Query an */
+.mobile-sheet-handle {
+  display: none; height: 32px; place-items: center;
+  cursor: pointer; user-select: none; touch-action: none;
+  background: var(--card); border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 5;
+}
+.mobile-sheet-handle::before {
+  content: ""; width: 44px; height: 5px; border-radius: 3px;
+  background: var(--paper-3);
+}
+
+/* Overlay für Sidebar-Drawer */
+.mobile-drawer-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(31,27,22,.45);
+  z-index: 49; backdrop-filter: blur(2px);
+}
+
+@media (max-width: 768px) {
+  /* === Topbar kompakt === */
+  .d-topbar { padding: 8px 10px; gap: 8px; flex-wrap: nowrap; }
+  .d-brand-mark { width: 32px; height: 32px; font-size: 16px; border-radius: 8px; }
+  .d-brand h1 { font-size: 15px; }
+  .d-brand .d-sub { display: none; }
+  .d-mode-toggle { padding: 2px; }
+  .d-mode-toggle button { padding: 6px 10px; font-size: 12px; gap: 5px; }
+  .d-mode-toggle svg { width: 13px; height: 13px; }
+  .d-top-actions { gap: 4px; }
+  .d-icon-btn { width: 36px; height: 36px; }
+  .d-icon-btn svg { width: 16px; height: 16px; }
+  .d-btn { padding: 7px 10px; font-size: 12px; }
+  .d-btn.primary span,
+  .d-btn span { display: inline; }
+  /* "Drucken"-Text auf Mobile ausblenden, Icon bleibt */
+  .d-btn.primary { padding: 8px 10px; }
+  .d-btn.primary .d-mobile-text { display: none; }
+
+  /* Hamburger sichtbar */
+  .d-hamburger { display: grid; }
+
+  /* === Sidebar wird Drawer === */
+  .mobile-drawer-host {
+    position: fixed !important;
+    top: 0; bottom: 0; left: 0;
+    width: min(86vw, 360px) !important;
+    max-width: 360px;
+    z-index: 50 !important;
+    background: var(--card) !important;
+    box-shadow: var(--shadow-lg);
+    transform: translateX(-105%);
+    transition: transform .25s ease;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+  }
+  .mobile-drawer-host.open { transform: translateX(0); }
+  .mobile-drawer-overlay.open { display: block; }
+
+  /* === Stat-Panel als Bottom-Sheet === */
+  .mobile-statsheet {
+    position: fixed !important;
+    left: 0 !important; right: 0 !important; bottom: 0 !important;
+    top: auto !important; width: auto !important; max-width: 100vw;
+    max-height: 70vh;
+    background: var(--paper);
+    border-top: 1px solid var(--line);
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -8px 24px rgba(60,40,20,.18);
+    z-index: 30;
+    transform: translateY(calc(100% - 76px));   /* nur Handle + Top-Stats sichtbar */
+    transition: transform .25s ease;
+    display: flex !important;
+    flex-direction: column;
+    overflow: hidden !important;
+  }
+  .mobile-statsheet.open { transform: translateY(0); }
+  .mobile-statsheet > .mobile-sheet-handle { display: grid; }
+  .mobile-statsheet .d-stat-hero {
+    border-radius: 0; padding: 10px 14px 12px;
+  }
+  .mobile-statsheet .d-stat-hero .d-big {
+    font-size: 44px; margin: 2px 0;
+  }
+  .mobile-statsheet .d-stat-hero .d-price { margin-top: 8px; padding-top: 8px; }
+
+  /* Body-Layout Mobile */
+  .d-mobile-flex { display: flex !important; flex-direction: column !important; }
+
+  /* Touch-Targets vergrößern */
+  .d-pill, .d-chip { min-height: 34px; }
+  input[type="range"] { height: 28px; }
+  input[type="range"]::-webkit-slider-thumb { width: 22px; height: 22px; margin-top: -10px; }
+  input[type="range"]::-moz-range-thumb { width: 22px; height: 22px; }
+
+  /* Verstecke Inhalt der nur-Desktop ist */
+  .d-mobile-hide { display: none !important; }
+
+  /* Größere Anker-Hitbox auf Touch (in der Render-Logik separat) */
+
+  /* Canvas-Toolbars auf Mobile etwas kleiner */
+  .d-canvas-toolbar { padding: 6px 8px; gap: 4px; }
+
+  /* Auswertung-Tweaks für Sheet */
+  .mobile-statsheet .d-panel { border-radius: 0; box-shadow: none; }
+  .mobile-statsheet .d-panel + .d-panel { border-top: 1px solid var(--line); }
+}
+
+/* Sehr kleine Geräte (<400 px) */
+@media (max-width: 400px) {
+  .d-brand h1 { font-size: 14px; }
+  .d-mode-toggle button span { display: none; }   /* nur Icons */
+  .d-mode-toggle button { padding: 6px 8px; }
+  .d-icon-btn { width: 34px; height: 34px; }
+}
