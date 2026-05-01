@@ -52,6 +52,16 @@ const MATERIAL_DEFAULTS = {
   parkett: { l: 130, b: 20,   fuge: 0,   fugeQuerOnly: false, nf: true  },
 };
 
+// Indikative Preise pro Einheit (€ pro Platte/Fliese/Diele) — für die
+// Kosten-Schätzung im Stat-Hero. Reale Preise variieren, die Werte dienen
+// als plausible Startpunkte.
+const PRICE_PER_PLATE = {
+  osb:     31.20,
+  fliesen:  4.50,
+  diele:   18.90,
+  parkett: 39.90,
+};
+
 // Mapping alter versatzTyp-Werte auf neue verlegemuster-Werte (Migration)
 const VERSATZ_TO_VERLEGEMUSTER = {
   kein: 'stapel',
@@ -445,6 +455,8 @@ function computePlatten({
               plate.id = platten.length + 1;
               plate.ukCut = true;  // Kennzeichnung für Stat-Erkennung
               plate.fullW = pW;    // volle Länge zur Rest-Berechnung
+              // UK-Schnitt verkleinert die Platte → kein "voll" mehr (außer der Schnitt landet zufällig auf voller Plattenlänge)
+              if (Math.abs(w - pW) > 0.5) plate.isFull = false;
               platten.push(plate);
             }
           }
@@ -485,6 +497,7 @@ function computePlatten({
               plate.id = platten.length + 1;
               plate.ukCut = true;
               plate.fullH = pH;
+              if (Math.abs(h - pH) > 0.5) plate.isFull = false;
               platten.push(plate);
             }
           }
@@ -694,6 +707,76 @@ export default function OSBPlaner() {
   const [ankerDrag, setAnkerDrag] = useState(null);
 
   const svgRef = useRef(null);
+  // Manueller View-Override (Pan + Zoom). null = Auto-Fit auf Polygon.
+  const [viewOverride, setViewOverride] = useState(null);
+  const [isPanning, setIsPanning] = useState(false);
+  const panRef = useRef(null);  // hält Start-Offsets während Drag
+
+  // Pen-Modus: Click-to-add mit 45°-Snap und Live-Preview
+  const [penMode, setPenMode] = useState(false);
+  const [penCursor, setPenCursor] = useState(null);  // { x, y } in SVG-Userspace
+  // Getippte Zahleneingabe überschreibt die Mausentfernung. Erlaubt exaktes Maß.
+  const [typedLen, setTypedLen] = useState('');
+
+  // ===== Undo / Redo History =====
+  const historyRef = useRef({ past: [], future: [] });
+  const skipHistoryRef = useRef(false);   // true = nicht in History pushen (beim Anwenden eines Snapshots)
+  const histTimerRef = useRef(null);
+  // forceRender wird benötigt, damit Toolbar-Buttons nach undo/redo ihren Enabled-Status aktualisieren
+  const [, setHistTick] = useState(0);
+  const bumpHistTick = () => setHistTick(t => t + 1);
+
+  function currentSnapshot() {
+    return {
+      kanten: kanten.map(k => ({ ...k })),
+      startAnker, offsetX, offsetY, rasterwinkel,
+      materialTyp, plattenL, plattenB, plattenAusrichtung,
+      fugenBreite, fugeQuerOnly, nutFederAktiv,
+      balkenAktiv, balkenBreite, balkenAchs, balkenRichtung, balkenOffset,
+      verlegemuster, verlegeRichtung, fischgratRichtung,
+      stoesseAufUk, resteNutzen,
+    };
+  }
+  function applySnapshot(s) {
+    if (!s) return;
+    skipHistoryRef.current = true;
+    setKanten(s.kanten.map(k => ({ ...k })));
+    setStartAnker(s.startAnker);
+    setOffsetX(s.offsetX); setOffsetY(s.offsetY);
+    setRasterwinkel(s.rasterwinkel);
+    setMaterialTyp(s.materialTyp);
+    setPlattenL(s.plattenL); setPlattenB(s.plattenB);
+    setPlattenAusrichtung(s.plattenAusrichtung);
+    setFugenBreite(s.fugenBreite); setFugeQuerOnly(s.fugeQuerOnly);
+    setNutFederAktiv(s.nutFederAktiv);
+    setBalkenAktiv(s.balkenAktiv);
+    setBalkenBreite(s.balkenBreite); setBalkenAchs(s.balkenAchs);
+    setBalkenRichtung(s.balkenRichtung); setBalkenOffset(s.balkenOffset);
+    setVerlegemuster(s.verlegemuster);
+    setVerlegeRichtung(s.verlegeRichtung);
+    setFischgratRichtung(s.fischgratRichtung);
+    setStoesseAufUk(s.stoesseAufUk);
+    setResteNutzen(s.resteNutzen);
+  }
+  function undo() {
+    const h = historyRef.current;
+    if (h.past.length < 2) return;
+    const curr = h.past.pop();
+    h.future.push(curr);
+    const prev = h.past[h.past.length - 1];
+    applySnapshot(prev);
+    bumpHistTick();
+  }
+  function redo() {
+    const h = historyRef.current;
+    if (!h.future.length) return;
+    const next = h.future.pop();
+    h.past.push(next);
+    applySnapshot(next);
+    bumpHistTick();
+  }
+  // Inline-Edit eines Kantenmaßes (Index der editierenden Kante oder null)
+  const [editingKante, setEditingKante] = useState(null);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -796,6 +879,265 @@ export default function OSBPlaner() {
     };
   }, [bounds]);
 
+  // Effektive viewBox: manueller Override (Pan/Zoom) oder Auto-Fit
+  const effViewBox = viewOverride ?? viewBox;
+
+  // Pointer → SVG-Userspace umrechnen (für Zoom um Cursor + Anker-Drag)
+  const clientToSVG = (clientX, clientY) => {
+    const svg = svgRef.current;
+    if (!svg) return { x: 0, y: 0 };
+    const pt = svg.createSVGPoint();
+    pt.x = clientX;
+    pt.y = clientY;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return { x: 0, y: 0 };
+    const m = pt.matrixTransform(ctm.inverse());
+    return { x: m.x, y: m.y };
+  };
+
+  // Zoom per Mausrad um die Cursor-Position herum
+  const handleWheel = (e) => {
+    e.preventDefault();
+    const vb = viewOverride ?? viewBox;
+    const { x: cx, y: cy } = clientToSVG(e.clientX, e.clientY);
+    const factor = e.deltaY > 0 ? 1.15 : 1 / 1.15;
+    const nw = Math.max(50, Math.min(50000, vb.w * factor));
+    const nh = Math.max(50, Math.min(50000, vb.h * factor));
+    // Zoom-Anker = Cursor-Punkt bleibt unter dem Mauszeiger
+    const nx = cx - (cx - vb.x) * (nw / vb.w);
+    const ny = cy - (cy - vb.y) * (nh / vb.h);
+    setViewOverride({ x: nx, y: ny, w: nw, h: nh });
+  };
+
+  // Pan: Click + Drag auf leeren Bereich. Im Pen-Modus nur die mittlere Maustaste.
+  const startPan = (e) => {
+    if (penMode && e.button !== 1) return;  // im Pen-Modus nur Mittelklick für Pan
+    if (e.button !== 0 && e.button !== 1) return;
+    const vb = viewOverride ?? viewBox;
+    panRef.current = {
+      startX: e.clientX, startY: e.clientY,
+      vbX: vb.x, vbY: vb.y, vbW: vb.w, vbH: vb.h,
+    };
+    setIsPanning(true);
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+  const movePan = (e) => {
+    // Cursor-Position für Pen-Preview aktualisieren
+    if (penMode) {
+      const p = clientToSVG(e.clientX, e.clientY);
+      setPenCursor(p);
+    }
+    if (!panRef.current) return;
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const scaleX = panRef.current.vbW / rect.width;
+    const scaleY = panRef.current.vbH / rect.height;
+    const dx = (e.clientX - panRef.current.startX) * scaleX;
+    const dy = (e.clientY - panRef.current.startY) * scaleY;
+    setViewOverride({
+      x: panRef.current.vbX - dx,
+      y: panRef.current.vbY - dy,
+      w: panRef.current.vbW,
+      h: panRef.current.vbH,
+    });
+  };
+  const endPan = (e) => {
+    if (!panRef.current) return;
+    panRef.current = null;
+    setIsPanning(false);
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+  };
+
+  // Pen: Linker-Klick im Pen-Modus → Punkt platzieren (getippte Länge hat Vorrang)
+  const handlePenClick = (e) => {
+    if (!penMode) return;
+    if (e.button !== undefined && e.button !== 0) return;
+    const p = clientToSVG(e.clientX, e.clientY);
+    const dx = p.x - penStart.x;
+    const dy = p.y - penStart.y;
+    if (Math.hypot(dx, dy) < 2 && !typedLen) return;  // zu kurz (außer typedLen gesetzt)
+    const snap = snapPen(dx, dy);
+    if (!snap.name) return;
+    const typed = parseFloat(typedLen);
+    const useTyped = typedLen !== '' && !Number.isNaN(typed) && typed > 0;
+    const length = useTyped ? typed : snap.length;
+    if (length < 0.5) return;
+    setKanten([...kanten, { laenge: parseFloat(length.toFixed(2)), richtung: snap.name }]);
+    if (useTyped) setTypedLen('');
+  };
+
+  // Wenn Pen-Modus aus → getipptes Maß verwerfen
+  useEffect(() => { if (!penMode) setTypedLen(''); }, [penMode]);
+
+  // Initial-Snapshot nach erstem Rendern, damit undo einen Start-Zustand hat
+  useEffect(() => {
+    const h = historyRef.current;
+    if (h.past.length === 0) {
+      h.past.push(currentSnapshot());
+      bumpHistTick();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Debounced History-Push: schreibt einen Snapshot, wenn sich relevante States ändern.
+  // Mehrfach-Änderungen innerhalb 400 ms werden zu einem Eintrag zusammengefasst (z. B. Tippen).
+  useEffect(() => {
+    if (skipHistoryRef.current) { skipHistoryRef.current = false; return; }
+    if (histTimerRef.current) clearTimeout(histTimerRef.current);
+    histTimerRef.current = setTimeout(() => {
+      const h = historyRef.current;
+      const snap = currentSnapshot();
+      const snapStr = JSON.stringify(snap);
+      const top = h.past[h.past.length - 1];
+      if (top && JSON.stringify(top) === snapStr) return;
+      h.past.push(snap);
+      if (h.past.length > 100) h.past.shift();
+      h.future = [];
+      bumpHistTick();
+    }, 400);
+    return () => { /* Timer bleibt; nächster Aufruf löscht ihn */ };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    kanten, startAnker, offsetX, offsetY, rasterwinkel,
+    materialTyp, plattenL, plattenB, plattenAusrichtung,
+    fugenBreite, fugeQuerOnly, nutFederAktiv,
+    balkenAktiv, balkenBreite, balkenAchs, balkenRichtung, balkenOffset,
+    verlegemuster, verlegeRichtung, fischgratRichtung,
+    stoesseAufUk, resteNutzen,
+  ]);
+
+  // Keyboard-Shortcut: Cmd/Ctrl+Z = Undo, Shift+Cmd/Ctrl+Z oder Cmd/Ctrl+Y = Redo
+  useEffect(() => {
+    const onKey = (e) => {
+      // Nicht in Text-Inputs einmischen (außer wenn kein Input fokussiert ist)
+      const t = e.target;
+      const isInput = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+      if (isInput) return;
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      if (e.key === 'z' || e.key === 'Z') {
+        e.preventDefault();
+        if (e.shiftKey) redo(); else undo();
+      } else if (e.key === 'y' || e.key === 'Y') {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const resetView = () => setViewOverride(null);
+
+  // Pen-Modus: aktueller Startpunkt = Endposition der bisherigen Kanten
+  const penStart = useMemo(() => {
+    let x = 0, y = 0;
+    for (const k of kanten) {
+      const r = RICHTUNGEN[k.richtung];
+      if (r && k.laenge > 0) { x += r.dx * k.laenge; y += r.dy * k.laenge; }
+    }
+    return { x, y };
+  }, [kanten]);
+
+  // Snap einer freien Mausbewegung auf die nächste 45°-Richtung
+  function snapPen(dx, dy) {
+    const step = Math.PI / 4;
+    const angle = Math.atan2(dy, dx);
+    const snapped = Math.round(angle / step) * step;
+    const sx = Math.cos(snapped);
+    const sy = Math.sin(snapped);
+    const ux = Math.abs(sx) < 0.1 ? 0 : (sx > 0 ? 1 : -1);
+    const uy = Math.abs(sy) < 0.1 ? 0 : (sy > 0 ? 1 : -1);
+    let name = null;
+    if      (ux ===  1 && uy ===  0) name = 'rechts';
+    else if (ux === -1 && uy ===  0) name = 'links';
+    else if (ux ===  0 && uy ===  1) name = 'runter';
+    else if (ux ===  0 && uy === -1) name = 'hoch';
+    else if (ux ===  1 && uy ===  1) name = 'rechts-runter';
+    else if (ux === -1 && uy ===  1) name = 'links-runter';
+    else if (ux ===  1 && uy === -1) name = 'rechts-hoch';
+    else if (ux === -1 && uy === -1) name = 'links-hoch';
+    // Cursor orthogonal auf Snap-Strahl projizieren, damit die Vorschau präzise zur Cursorposition passt
+    const proj = dx * sx + dy * sy;
+    const length = Math.max(0, proj);
+    // Unit-Vektor im Ziel-Raum (wegen RICHTUNGEN-Normierung: SQRT1_2 für Diagonalen)
+    const r = RICHTUNGEN[name];
+    return { name, length, endX: penStart.x + (r ? r.dx * length : 0), endY: penStart.y + (r ? r.dy * length : 0) };
+  }
+
+  // Live-Preview: vom Startpunkt bis zur gesnappten Cursorposition
+  const penPreview = useMemo(() => {
+    if (!penMode || !penCursor) return null;
+    const dx = penCursor.x - penStart.x;
+    const dy = penCursor.y - penStart.y;
+    if (Math.hypot(dx, dy) < 2) return null;  // Cursor zu nah am Start → nichts anzeigen
+    return snapPen(dx, dy);
+  }, [penMode, penCursor, penStart]);
+
+  // Anzuzeigender Preview-Zustand: getipptes Maß überschreibt Cursor-Länge
+  const penDisplay = useMemo(() => {
+    if (!penPreview) return null;
+    const typed = parseFloat(typedLen);
+    const useTyped = typedLen !== '' && !Number.isNaN(typed) && typed >= 0;
+    const len = useTyped ? typed : penPreview.length;
+    const r = RICHTUNGEN[penPreview.name];
+    return {
+      name: penPreview.name,
+      length: len,
+      endX: penStart.x + (r ? r.dx * len : 0),
+      endY: penStart.y + (r ? r.dy * len : 0),
+      typedText: useTyped ? typedLen : null,
+    };
+  }, [penPreview, typedLen, penStart]);
+
+  // Pen-Modus-Keyboard: Ziffern tippen für exaktes Maß, Enter = bestätigen,
+  // Backspace = löschen, Escape = zuerst Maß leeren, sonst Pen-Modus verlassen.
+  useEffect(() => {
+    if (!penMode) return;
+    const onKey = (e) => {
+      const t = e.target;
+      const isInput = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+      if (isInput) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      if (e.key >= '0' && e.key <= '9') {
+        e.preventDefault();
+        setTypedLen(prev => (prev + e.key).slice(0, 8));
+      } else if (e.key === '.' || e.key === ',') {
+        e.preventDefault();
+        setTypedLen(prev => prev.includes('.') ? prev : (prev === '' ? '0.' : prev + '.'));
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        setTypedLen(prev => prev.slice(0, -1));
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const v = parseFloat(typedLen);
+        if (typedLen && !Number.isNaN(v) && v > 0 && penPreview?.name) {
+          setKanten([...kanten, { laenge: parseFloat(v.toFixed(2)), richtung: penPreview.name }]);
+          setTypedLen('');
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        if (typedLen) setTypedLen('');
+        else setPenMode(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [penMode, typedLen, penPreview, kanten]);
+
+  // Wheel muss non-passiv registriert werden, damit preventDefault() wirkt
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const listener = (e) => handleWheel(e);
+    svg.addEventListener('wheel', listener, { passive: false });
+    return () => svg.removeEventListener('wheel', listener);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewOverride, viewBox.x, viewBox.y, viewBox.w, viewBox.h]);
+
   const plattenDims = useMemo(() => {
     let pW, pH;
     if (!balkenAktiv) {
@@ -891,6 +1233,33 @@ export default function OSBPlaner() {
     setKanten([...kanten, ...neue]);
   }
 
+  // Mutual-Exclusion: "Stöße auf UK" lässt sich nicht mit Nut/Feder kombinieren —
+  // bei aktiver N/F müsste eine Platte willkürlich gekappt werden, was die N/F-Kanten zerstört.
+  function setStoesseAufUkSafe(value) {
+    if (value && nutFederAktiv) {
+      const ok = typeof window !== 'undefined' && window.confirm(
+        'Bei aktivem Nut/Feder-Profil können Platten nicht beliebig gekappt werden — die N/F-Kanten werden sonst zerstört.\n\n' +
+        '"Nut/Feder" wird bei Aktivierung von "Stöße auf Unterkonstruktion" automatisch deaktiviert.\n\n' +
+        'Fortfahren?'
+      );
+      if (!ok) return;
+      setNutFederAktiv(false);
+    }
+    setStoesseAufUk(value);
+  }
+  function setNutFederAktivSafe(value) {
+    if (value && stoesseAufUk) {
+      const ok = typeof window !== 'undefined' && window.confirm(
+        'Nut/Feder ist nicht mit "Stöße auf Unterkonstruktion" kompatibel — die N/F-Kanten werden beim Kappen zerstört.\n\n' +
+        '"Stöße auf Unterkonstruktion" wird automatisch deaktiviert.\n\n' +
+        'Fortfahren?'
+      );
+      if (!ok) return;
+      setStoesseAufUk(false);
+    }
+    setNutFederAktiv(value);
+  }
+
   function savePreset() {
     const def = `${plattenL}×${plattenB}`;
     const label = (typeof window !== 'undefined') ? window.prompt('Name für Preset:', def) : def;
@@ -919,6 +1288,8 @@ export default function OSBPlaner() {
     setPlattenB(d.b);
     setFugenBreite(d.fuge);
     setFugeQuerOnly(d.fugeQuerOnly);
+    // Wenn neues Material N/F-fähig ist und UK-Stöße aktiv → UK-Stöße still ausschalten
+    if (d.nf && stoesseAufUk) setStoesseAufUk(false);
     setNutFederAktiv(!!d.nf);
     if (mat === 'diele') {
       setPlattenAusrichtung('quer');
@@ -1165,60 +1536,52 @@ export default function OSBPlaner() {
   const rotateTransform = `rotate(${rasterwinkel} ${center.x} ${center.y})`;
 
   return (
-    <div className="w-full h-screen bg-slate-950 text-slate-100 flex flex-col">
-      <header className="bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <Grid3x3 className="text-amber-400 shrink-0" size={24} />
-          <div className="min-w-0">
-            <h1 className="text-lg font-bold">OSB-Verlegeplaner</h1>
-            <p className="text-xs text-slate-400 truncate">
-              {mode === 'zeichnen' ? 'Kanten und Form definieren' : 'Balken, Platten und Auswertung'}
-            </p>
+    <div className="paper-theme w-full h-screen flex flex-col" style={{ color: 'var(--ink)' }}>
+      <header className="d-topbar">
+        <div className="d-brand">
+          <div className="d-brand-mark">V</div>
+          <div>
+            <h1>Verlege-Rechner</h1>
+            <div className="d-sub">OSB · Fliesen · Dielen · Parkett</div>
           </div>
         </div>
 
-        <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-1">
-          <button
-            onClick={() => setMode('zeichnen')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-semibold transition ${
-              mode === 'zeichnen' ? 'bg-amber-600 text-white shadow' : 'text-slate-300 hover:bg-slate-700'
-            }`}
-          >
-            <Edit3 size={16} /> Zeichnen
+        <div className="d-mode-toggle">
+          <button onClick={() => setMode('zeichnen')} className={mode === 'zeichnen' ? 'on' : ''}>
+            <Edit3 size={15} /> Zeichnen
           </button>
           <button
             onClick={() => setMode('parameter')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-semibold transition ${
-              mode === 'parameter' ? 'bg-amber-600 text-white shadow' : 'text-slate-300 hover:bg-slate-700'
-            }`}
+            className={mode === 'parameter' ? 'on' : ''}
             disabled={!polygonGeschlossen}
             title={!polygonGeschlossen ? 'Polygon zuerst schließen' : ''}
           >
-            <Sliders size={16} /> Parameter
+            <Sliders size={15} /> Parameter
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
-          {mode === 'zeichnen' && polygonGeschlossen && (
-            <div className="hidden md:flex items-center gap-4 px-4 py-2 bg-slate-800 rounded-lg text-sm">
-              <span><span className="text-slate-400">Umfang:</span> <span className="font-mono font-bold text-blue-400">{(umfang / 100).toFixed(2)} m</span></span>
-              <span><span className="text-slate-400">Fläche:</span> <span className="font-mono font-bold text-amber-400">{polygonFlaeche.toFixed(2)} m²</span></span>
-            </div>
-          )}
+        <div className="d-top-actions">
           <button
-            onClick={saveZeichnung}
-            className="p-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 transition"
-            title="Zeichnung als JSON speichern"
+            onClick={undo}
+            disabled={historyRef.current.past.length < 2}
+            className="d-icon-btn"
+            title="Rückgängig (⌘Z / Ctrl+Z)"
+            style={{ opacity: historyRef.current.past.length < 2 ? 0.35 : 1 }}
           >
-            <Save size={18} />
+            <RotateCw size={17} style={{ transform: 'scaleX(-1)' }} />
           </button>
           <button
-            onClick={() => fileInputRef.current?.click()}
-            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 transition"
-            title="Zeichnung (JSON) laden"
+            onClick={redo}
+            disabled={historyRef.current.future.length === 0}
+            className="d-icon-btn"
+            title="Wiederholen (⇧⌘Z / Ctrl+Shift+Z)"
+            style={{ opacity: historyRef.current.future.length === 0 ? 0.35 : 1 }}
           >
-            <Upload size={18} />
+            <RotateCw size={17} />
           </button>
+          <span style={{ width: 6 }} />
+          <button onClick={saveZeichnung} className="d-icon-btn" title="Zeichnung als JSON speichern"><Save size={17} /></button>
+          <button onClick={() => fileInputRef.current?.click()} className="d-icon-btn" title="JSON laden"><Upload size={17} /></button>
           <input
             ref={fileInputRef}
             type="file"
@@ -1230,9 +1593,7 @@ export default function OSBPlaner() {
               e.target.value = '';
             }}
           />
-          <button onClick={exportSVG} className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 transition" title="SVG exportieren">
-            <Download size={18} />
-          </button>
+          <button onClick={exportSVG} className="d-btn primary" title="SVG exportieren"><Download size={15} />Drucken</button>
         </div>
       </header>
 
@@ -1290,9 +1651,25 @@ export default function OSBPlaner() {
                   ))}
                 </div>
 
-                <button onClick={addKante} className="w-full mt-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-xs font-bold flex items-center justify-center gap-2">
-                  <Plus size={12} /> Kante hinzufügen
-                </button>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  <button onClick={addKante} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-xs font-bold flex items-center justify-center gap-2 text-white">
+                    <Plus size={12} /> Kante
+                  </button>
+                  <button
+                    onClick={() => setPenMode(v => !v)}
+                    className={`px-3 py-1.5 rounded text-xs font-bold flex items-center justify-center gap-2 ${penMode ? 'bg-amber-600 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'}`}
+                    title="Im Canvas klicken, um Punkte zu platzieren (Snap: 45° / 90°). ESC zum Beenden."
+                  >
+                    <Edit3 size={12} /> {penMode ? 'Pen aktiv' : 'Pen-Modus'}
+                  </button>
+                </div>
+                {penMode && (
+                  <div className="mt-2 px-3 py-2 rounded text-[11px]" style={{ background: 'var(--amber-bg)', color: 'var(--amber-ink)', border: '1px solid var(--amber)', lineHeight: 1.4 }}>
+                    ✏ <b>Klick</b> platziert Punkt (Snap auf 45°/90°). <br/>
+                    🔢 Während Preview <b>Zahl tippen</b> → exaktes Maß; <kbd>Enter</kbd> bestätigt.<br/>
+                    🖐 <b>Mittelklick</b> zum Pannen · <kbd>Esc</kbd> zum Beenden
+                  </div>
+                )}
 
                 {gap.dist > 0.5 && (
                   <div className="mt-3 bg-red-950/50 border border-red-700 rounded p-2 text-xs">
@@ -1386,7 +1763,7 @@ export default function OSBPlaner() {
                     </div>
                     {materialTyp !== 'fliesen' && (
                       <label className="flex items-center gap-2 mt-2 text-slate-300">
-                        <input type="checkbox" checked={nutFederAktiv} onChange={e => setNutFederAktiv(e.target.checked)} />
+                        <input type="checkbox" checked={nutFederAktiv} onChange={e => setNutFederAktivSafe(e.target.checked)} />
                         {materialTyp === 'parkett' ? 'Klicksystem (N/F)' : 'Nut/Feder'}
                         <span className="text-[10px] text-slate-500">— Maße = sichtbare Außenmaße</span>
                       </label>
@@ -1639,7 +2016,7 @@ export default function OSBPlaner() {
                           <input
                             type="checkbox"
                             checked={stoesseAufUk}
-                            onChange={e => setStoesseAufUk(e.target.checked)}
+                            onChange={e => setStoesseAufUkSafe(e.target.checked)}
                             disabled={!senkrecht}
                           />
                           Stöße auf Unterkonstruktion
@@ -1677,16 +2054,28 @@ export default function OSBPlaner() {
         <main className="flex-1 bg-slate-950 relative overflow-hidden">
           <svg
             ref={svgRef}
-            viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
+            viewBox={`${effViewBox.x} ${effViewBox.y} ${effViewBox.w} ${effViewBox.h}`}
             className="w-full h-full"
-            style={{ backgroundColor: '#020617' }}
+            style={{
+              backgroundColor: 'var(--card)',
+              backgroundImage:
+                'linear-gradient(rgba(60,40,20,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(60,40,20,.05) 1px, transparent 1px)',
+              backgroundSize: '24px 24px',
+              cursor: penMode ? 'crosshair' : (isPanning ? 'grabbing' : 'grab'),
+              touchAction: 'none',
+            }}
+            onPointerDown={startPan}
+            onPointerMove={movePan}
+            onPointerUp={endPan}
+            onPointerCancel={endPan}
+            onClick={handlePenClick}
           >
             <defs>
               <pattern id="grid10" width="10" height="10" patternUnits="userSpaceOnUse">
-                <circle cx="0" cy="0" r="0.5" fill="#334155" />
+                <circle cx="0" cy="0" r="0.5" fill="#8b7a5a" opacity="0.4" />
               </pattern>
               <pattern id="grid100" width="100" height="100" patternUnits="userSpaceOnUse">
-                <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#1e293b" strokeWidth="0.5" />
+                <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#a88b55" strokeWidth="0.5" opacity="0.35" />
               </pattern>
               {rotPolygon.length >= 3 && (
                 <clipPath id="flaechen-clip-rot">
@@ -1699,7 +2088,7 @@ export default function OSBPlaner() {
             <rect x={viewBox.x} y={viewBox.y} width={viewBox.w} height={viewBox.h} fill="url(#grid100)" />
 
             {points.length >= 3 && (
-              <path d={polygonPath} fill="rgba(251,191,36,0.03)" stroke="#fbbf24" strokeWidth="3" />
+              <path d={polygonPath} fill="rgba(200,122,31,0.04)" stroke="#2a1f12" strokeWidth="2.5" strokeLinejoin="round" />
             )}
 
             <g transform={rotateTransform}>
@@ -1852,6 +2241,64 @@ export default function OSBPlaner() {
               <line x1={points[points.length - 1].x} y1={points[points.length - 1].y} x2={points[0].x} y2={points[0].y} stroke="#ef4444" strokeWidth="2" strokeDasharray="6,3" />
             )}
 
+            {/* Pen-Modus: Start-Marker + Preview-Linie + Live-Maß */}
+            {penMode && (
+              <g pointerEvents="none">
+                {/* Start-Punkt (Fadenkreuz) */}
+                <circle cx={penStart.x} cy={penStart.y} r="6" fill="none" stroke="#c87a1f" strokeWidth="2" />
+                <circle cx={penStart.x} cy={penStart.y} r="2.5" fill="#c87a1f" />
+                {penDisplay && (() => {
+                  const midX = (penStart.x + penDisplay.endX) / 2;
+                  const midY = (penStart.y + penDisplay.endY) / 2;
+                  const dx = penDisplay.endX - penStart.x;
+                  const dy = penDisplay.endY - penStart.y;
+                  const len = Math.hypot(dx, dy);
+                  const nx = len > 0 ? -dy / len * 22 : 0;
+                  const ny = len > 0 ? dx / len * 22 : 0;
+                  const typed = !!penDisplay.typedText;
+                  const lineColor = typed ? '#3f7a3a' : '#c87a1f';   // grün = getippt, orange = Cursor
+                  const bgColor   = typed ? '#3f7a3a' : '#1f1b16';
+                  const fgColor   = typed ? '#ffffff' : '#f4dfb2';
+                  const labelText = typed
+                    ? `${penDisplay.typedText.replace('.', ',')}| cm`
+                    : `${penDisplay.length.toFixed(1).replace('.', ',')} cm`;
+                  const pillW = Math.max(78, labelText.length * 8 + 20);
+                  return (
+                    <>
+                      <line
+                        x1={penStart.x} y1={penStart.y}
+                        x2={penDisplay.endX} y2={penDisplay.endY}
+                        stroke={lineColor} strokeWidth="2.5" strokeDasharray="6,4" strokeLinecap="round"
+                      />
+                      <circle cx={penDisplay.endX} cy={penDisplay.endY} r="5" fill={lineColor} stroke="#6a3c0c" strokeWidth="1.5" />
+                      {/* Live-Maß-Pill */}
+                      <g>
+                        <rect
+                          x={midX + nx - pillW / 2} y={midY + ny - 13}
+                          width={pillW} height="26" rx="7"
+                          fill={bgColor} stroke={lineColor} strokeWidth="1.5"
+                        />
+                        <text
+                          x={midX + nx} y={midY + ny + 5} textAnchor="middle"
+                          fontSize="13" fontFamily="JetBrains Mono" fontWeight="700" fill={fgColor}
+                        >
+                          {labelText}
+                        </text>
+                        {typed && (
+                          <text
+                            x={midX + nx} y={midY + ny + 20} textAnchor="middle"
+                            fontSize="8" fontFamily="Inter Tight, sans-serif" fontWeight="600" fill="rgba(255,255,255,0.65)"
+                          >
+                            ↵ Enter
+                          </text>
+                        )}
+                      </g>
+                    </>
+                  );
+                })()}
+              </g>
+            )}
+
             {canvasZeigeLabels && points.length >= 3 && (() => {
               let sArea = 0;
               for (let i = 0; i < points.length; i++) {
@@ -1882,15 +2329,55 @@ export default function OSBPlaner() {
                 let angleDeg = Math.atan2(dy, dx) * 180 / Math.PI;
                 if (angleDeg > 90) angleDeg -= 180;
                 if (angleDeg < -90) angleDeg += 180;
+                const isEditing = editingKante === i;
                 return (
-                  <g key={`dim-${i}`} pointerEvents="none">
-                    <line x1={e1a.x} y1={e1a.y} x2={e1b.x} y2={e1b.y} stroke="#60a5fa" strokeWidth="0.6" opacity="0.75" />
-                    <line x1={e2a.x} y1={e2a.y} x2={e2b.x} y2={e2b.y} stroke="#60a5fa" strokeWidth="0.6" opacity="0.75" />
-                    <line x1={d1.x} y1={d1.y} x2={d2.x} y2={d2.y} stroke="#60a5fa" strokeWidth="0.8" opacity="0.9" />
-                    <text x={tx} y={ty + 3} textAnchor="middle" fontSize="11" fill="#93c5fd" fontFamily="monospace" fontWeight="bold"
-                      transform={`rotate(${angleDeg} ${tx} ${ty})`}>
-                      {len.toFixed(1)}
-                    </text>
+                  <g key={`dim-${i}`}>
+                    <g pointerEvents="none">
+                      <line x1={e1a.x} y1={e1a.y} x2={e1b.x} y2={e1b.y} stroke="#60a5fa" strokeWidth="0.6" opacity="0.75" />
+                      <line x1={e2a.x} y1={e2a.y} x2={e2b.x} y2={e2b.y} stroke="#60a5fa" strokeWidth="0.6" opacity="0.75" />
+                      <line x1={d1.x} y1={d1.y} x2={d2.x} y2={d2.y} stroke="#60a5fa" strokeWidth="0.8" opacity="0.9" />
+                    </g>
+                    {isEditing ? (
+                      <foreignObject x={tx - 42} y={ty - 14} width="84" height="28"
+                        transform={`rotate(${angleDeg} ${tx} ${ty})`}>
+                        <input
+                          type="number" step="0.1" autoFocus
+                          defaultValue={kanten[i]?.laenge ?? len}
+                          onBlur={(e) => {
+                            const v = parseFloat(e.target.value);
+                            if (!Number.isNaN(v) && v > 0) updateKante(i, 'laenge', v);
+                            setEditingKante(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') e.currentTarget.blur();
+                            else if (e.key === 'Escape') { e.stopPropagation(); setEditingKante(null); }
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            width: '100%', height: '100%', textAlign: 'center',
+                            border: '2px solid var(--amber)', borderRadius: '6px',
+                            background: 'var(--card)', color: 'var(--ink)',
+                            fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
+                            fontSize: '13px', outline: 'none', padding: 0,
+                          }}
+                        />
+                      </foreignObject>
+                    ) : (
+                      <g
+                        onClick={(e) => { e.stopPropagation(); setEditingKante(i); }}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        {/* Hitbox damit klickbar */}
+                        <rect x={tx - 26} y={ty - 10} width="52" height="20" rx="4"
+                          fill="transparent"
+                          transform={`rotate(${angleDeg} ${tx} ${ty})`} />
+                        <text x={tx} y={ty + 3} textAnchor="middle" fontSize="11" fill="#93c5fd" fontFamily="monospace" fontWeight="bold"
+                          transform={`rotate(${angleDeg} ${tx} ${ty})`}
+                          style={{ userSelect: 'none' }}>
+                          {len.toFixed(1)}
+                        </text>
+                      </g>
+                    )}
                   </g>
                 );
               });
@@ -1898,84 +2385,229 @@ export default function OSBPlaner() {
           </svg>
 
           {mode === 'parameter' && plattenPlan.stats && (
-            <div className="absolute top-4 right-4 w-72 bg-slate-900/95 backdrop-blur border border-slate-700 rounded-lg shadow-2xl overflow-hidden">
-              <div className="bg-slate-800 px-3 py-2 flex items-center justify-between">
-                <h3 className="text-sm font-bold text-amber-400">📊 Auswertung</h3>
-                <span className="text-[10px] text-slate-400 font-mono">{MATERIAL_LABEL[materialTyp]}</span>
-              </div>
-
-              {/* Top stats — immer sichtbar */}
-              <div className="grid grid-cols-3 gap-2 p-3 border-b border-slate-800">
-                <div>
-                  <div className="text-[10px] text-slate-400">Fläche</div>
-                  <div className="font-mono font-bold text-amber-400 text-sm">{plattenPlan.stats.flaeche.toFixed(2)} m²</div>
+            <div className="absolute top-4 right-4 w-80 flex flex-col gap-3 max-h-[calc(100vh-130px)] overflow-y-auto">
+              {/* ==== STAT HERO (Zu kaufen) ==== */}
+              <div className="d-stat-hero">
+                <div className="d-lbl">Zu kaufen</div>
+                <div className="d-big">{plattenPlan.stats.purchasedPlates}</div>
+                <div className="d-unit">
+                  {MATERIAL_LABEL[materialTyp]} {plattenPlan.stats.plattenDimW}×{plattenPlan.stats.plattenDimH} cm
                 </div>
-                <div>
-                  <div className="text-[10px] text-slate-400">Zu kaufen</div>
-                  <div className="font-mono font-bold text-emerald-400 text-sm">{plattenPlan.stats.purchasedPlates}</div>
-                  <div className="text-[9px] text-slate-500">({plattenPlan.stats.anzahl} verlegt)</div>
-                </div>
-                <div>
-                  <div className="text-[10px] text-slate-400">Verschnitt</div>
-                  <div className={`font-mono font-bold text-sm ${
-                    plattenPlan.stats.verschnittProz > 30 ? 'text-red-400' :
-                    plattenPlan.stats.verschnittProz < 20 ? 'text-emerald-400' : 'text-orange-400'
-                  }`}>{plattenPlan.stats.verschnittProz.toFixed(1)} %</div>
+                <div className="d-price">
+                  <span className="d-eur">
+                    {(plattenPlan.stats.purchasedPlates * PRICE_PER_PLATE[materialTyp]).toFixed(2).replace('.', ',')} €
+                  </span>
+                  <span className="d-calc">
+                    {plattenPlan.stats.purchasedPlates} × {PRICE_PER_PLATE[materialTyp].toFixed(2).replace('.', ',')} €
+                  </span>
                 </div>
               </div>
 
-              {/* Details */}
-              <div className="p-3 space-y-1.5 text-xs max-h-[60vh] overflow-y-auto">
-                <StatRow label="davon volle" value={plattenPlan.stats.vollePlatten} />
-                <StatRow label="davon Zuschnitte" value={plattenPlan.stats.zuschnitte} />
-                {resteNutzen && plattenPlan.stats.ausRest > 0 && (
-                  <StatRow label="davon aus Rest" value={plattenPlan.stats.ausRest} highlight />
-                )}
-                <StatRow label="Stückgröße" value={`${plattenPlan.stats.plattenDimW}×${plattenPlan.stats.plattenDimH} cm`} />
-                {materialTyp !== 'osb' && fugenBreite > 0 && (
-                  <StatRow label="Fugenbreite" value={`${(fugenBreite * 10).toFixed(1)} mm${fugeQuerOnly ? ' (nur quer)' : ''}`} />
-                )}
-                <div className="border-t border-slate-800 my-2 pt-2">
-                  <label className="flex items-center gap-2 text-slate-300">
-                    <input type="checkbox" checked={resteNutzen} onChange={e => setResteNutzen(e.target.checked)} />
-                    Reststücke wiederverwenden
-                  </label>
+              {/* ==== KPI GRID ==== */}
+              <div className="d-panel">
+                <div className="d-panel-h">
+                  <h3>Auswertung</h3>
+                  <span className="d-num">LIVE</span>
                 </div>
-                <StatRow label="Gekaufte Fläche" value={`${plattenPlan.stats.gekaufteFlaeche.toFixed(2)} m²`} />
-                <StatRow label="Nutzfläche" value={`${plattenPlan.stats.nutzFlaeche.toFixed(2)} m²`} />
+                <div className="d-panel-body">
+                  <div className="d-kpi-grid">
+                    <div className="d-kpi">
+                      <div className="d-k">Fläche</div>
+                      <div className="d-v">{plattenPlan.stats.flaeche.toFixed(2).replace('.', ',')}<small> m²</small></div>
+                    </div>
+                    <div className="d-kpi">
+                      <div className="d-k">Nutzfläche</div>
+                      <div className="d-v">{plattenPlan.stats.nutzFlaeche.toFixed(2).replace('.', ',')}<small> m²</small></div>
+                    </div>
+                    <div className="d-kpi good">
+                      <div className="d-k">Vollplatten</div>
+                      <div className="d-v">{plattenPlan.stats.vollePlatten}</div>
+                    </div>
+                    <div className="d-kpi warn">
+                      <div className="d-k">Zuschnitte</div>
+                      <div className="d-v">{plattenPlan.stats.zuschnitte}</div>
+                    </div>
+                    {resteNutzen && plattenPlan.stats.ausRest > 0 && (
+                      <div className="d-kpi" style={{ gridColumn: 'span 2' }}>
+                        <div className="d-k">Aus Rest wiederverwendet</div>
+                        <div className="d-v" style={{ color: 'var(--green)' }}>
+                          {plattenPlan.stats.ausRest}<small> Zuschnitte</small>
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
-                {resteNutzen && plattenPlan.stats.restStueckePool && plattenPlan.stats.restStueckePool.length > 0 && (
-                  <div className="border-t border-slate-800 my-2 pt-2">
-                    <p className="text-slate-400 mb-1">Übrige Reststücke:</p>
-                    <div className="flex flex-wrap gap-1">
-                      {plattenPlan.stats.restStueckePool.slice(0, 10).map((r, i) => (
-                        <span key={i} className="font-mono text-[10px] bg-slate-800 rounded px-1.5 py-0.5">
-                          {r.toFixed(1)} cm
-                        </span>
+                  <div className="d-sec-label" style={{ marginTop: '14px' }}>Verschnitt</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <div className="font-display" style={{
+                      fontWeight: 700, fontSize: '28px',
+                      color: plattenPlan.stats.verschnittProz > 30 ? 'var(--red)' :
+                             plattenPlan.stats.verschnittProz < 20 ? 'var(--green)' : 'var(--orange)',
+                      letterSpacing: '-.01em',
+                    }}>
+                      {plattenPlan.stats.verschnittProz.toFixed(1).replace('.', ',')}<small style={{ fontSize: '13px' }}>%</small>
+                    </div>
+                    <div className="font-mono" style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                      {((plattenPlan.stats.gekaufteFlaeche - plattenPlan.stats.nutzFlaeche)).toFixed(2).replace('.', ',')} m² Abfall
+                    </div>
+                  </div>
+                  <div className="d-verschnitt-bar">
+                    <div className="d-fill" style={{ width: '100%' }} />
+                    <div className="d-mark" style={{ left: `${Math.min(100, plattenPlan.stats.verschnittProz * 2)}%` }} />
+                  </div>
+                  <div className="d-verschnitt-scale">
+                    <span>0%</span><span>gut</span><span>25%</span><span>50%+</span>
+                  </div>
+
+                  {plattenPlan.stats.stoesseGesamt > 0 && (
+                    <>
+                      <div className="d-sec-label" style={{ marginTop: '14px' }}>Stöße auf Unterkonstruktion</div>
+                      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '2px' }}>
+                        <div className="font-mono" style={{ fontSize: '13px', fontWeight: 600 }}>
+                          {plattenPlan.stats.stoesseAufBalken}{' '}
+                          <span style={{ color: 'var(--muted)', fontWeight: 500 }}>/ {plattenPlan.stats.stoesseGesamt}</span>
+                        </div>
+                        <div className="font-mono" style={{
+                          fontSize: '11px',
+                          color: plattenPlan.stats.stoesseAufBalken === plattenPlan.stats.stoesseGesamt ? 'var(--green)' : 'var(--orange)',
+                        }}>
+                          {Math.round((plattenPlan.stats.stoesseAufBalken / plattenPlan.stats.stoesseGesamt) * 100)} %
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '2px' }}>
+                        {Array.from({ length: Math.min(12, plattenPlan.stats.stoesseGesamt) }).map((_, i) => {
+                          const ratio = plattenPlan.stats.stoesseAufBalken / plattenPlan.stats.stoesseGesamt;
+                          const threshold = (i + 1) / Math.min(12, plattenPlan.stats.stoesseGesamt);
+                          const filled = threshold <= ratio;
+                          return (
+                            <div key={i} style={{
+                              flex: 1, height: '4px',
+                              background: filled ? 'var(--green)' : 'var(--paper-3)',
+                              borderRadius: '2px',
+                            }} />
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* ==== REST POOL ==== */}
+              {resteNutzen && plattenPlan.stats.restStueckePool && plattenPlan.stats.restStueckePool.length > 0 && (
+                <div className="d-panel">
+                  <div className="d-panel-h">
+                    <h3>Rest-Pool</h3>
+                    <span className="d-num">{plattenPlan.stats.restStueckePool.length} STK.</span>
+                  </div>
+                  <div className="d-panel-body">
+                    <div className="d-pool">
+                      {plattenPlan.stats.restStueckePool.slice(0, 12).map((r, i) => (
+                        <span key={i} className="d-rest">{r.toFixed(0)} cm</span>
                       ))}
-                      {plattenPlan.stats.restStueckePool.length > 10 && (
-                        <span className="text-[10px] text-slate-500 self-center">
-                          +{plattenPlan.stats.restStueckePool.length - 10} weitere
+                      {plattenPlan.stats.restStueckePool.length > 12 && (
+                        <span className="d-rest" style={{ background: 'var(--paper-2)', color: 'var(--muted)', borderColor: 'var(--line)' }}>
+                          +{plattenPlan.stats.restStueckePool.length - 12}
                         </span>
                       )}
                     </div>
-                  </div>
-                )}
-                <div className="border-t border-slate-800 my-2 pt-2">
-                  <p className="text-slate-400 mb-1">Längs-Stöße auf Balken:</p>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-2 bg-slate-800 rounded overflow-hidden">
-                      <div
-                        className={`h-full transition-all ${plattenPlan.stats.stoesseAufBalken === plattenPlan.stats.stoesseGesamt ? 'bg-emerald-500' : 'bg-orange-500'}`}
-                        style={{ width: `${plattenPlan.stats.stoesseGesamt > 0 ? (plattenPlan.stats.stoesseAufBalken / plattenPlan.stats.stoesseGesamt) * 100 : 0}%` }}
-                      />
+                    <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '6px' }}>
+                      Reste ≥ 5 cm werden wiederverwendet
                     </div>
-                    <span className="font-mono text-xs">{plattenPlan.stats.stoesseAufBalken}/{plattenPlan.stats.stoesseGesamt}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* ==== CUT LIST (Stückliste) ==== */}
+              <div className="d-panel" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <div className="d-panel-h">
+                  <h3>Stückliste</h3>
+                  <span className="d-num">{plattenPlan.platten.length}</span>
+                </div>
+                <div className="d-panel-body" style={{ paddingTop: '4px', overflow: 'auto', maxHeight: '260px' }}>
+                  <div className="d-cutlist">
+                    {plattenPlan.platten.slice(0, 40).map((p, i) => {
+                      const ausRest = resteNutzen && plattenPlan.stats.ausRestIds?.has(p.id);
+                      const type = p.isFull ? 'Voll' : ausRest ? '↺ Rest' : 'Zuschnitt';
+                      const swBg = p.isFull
+                        ? 'rgba(63,122,58,.3)'
+                        : ausRest
+                          ? 'rgba(209,114,45,.35)'
+                          : 'rgba(178,72,50,.3)';
+                      return (
+                        <div key={p.id} className="d-cutlist-row">
+                          <span className="d-idx">{String(i + 1).padStart(2, '0')}</span>
+                          <span className="d-type"><span className="d-sw" style={{ background: swBg }} />{type}</span>
+                          <span className="d-dim">
+                            <b>{Math.round(p.w)}×{Math.round(p.h)}</b>
+                          </span>
+                        </div>
+                      );
+                    })}
+                    {plattenPlan.platten.length > 40 && (
+                      <div style={{ fontSize: '11px', color: 'var(--muted)', textAlign: 'center', paddingTop: '6px' }}>
+                        +{plattenPlan.platten.length - 40} weitere
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
+
+              {/* Rest-wiederverwenden-Toggle (kompakt unter Stückliste) */}
+              <label className="d-toggle-row" style={{ padding: '8px 12px', background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 'var(--r)' }}>
+                <span className="d-lbl">
+                  Reststücke wiederverwenden
+                  <span className="d-sub">Pool-Matching</span>
+                </span>
+                <span className={`d-switch ${resteNutzen ? 'on' : ''}`} onClick={() => setResteNutzen(!resteNutzen)} />
+              </label>
             </div>
           )}
+
+          {/* Pan/Zoom-FABs unten links */}
+          <div className="absolute bottom-4 left-4 flex flex-col gap-1.5" style={{ pointerEvents: 'auto' }}>
+            <button
+              onClick={() => {
+                const vb = viewOverride ?? viewBox;
+                const { x: cx, y: cy } = { x: vb.x + vb.w / 2, y: vb.y + vb.h / 2 };
+                const f = 1 / 1.25;
+                setViewOverride({ x: cx - (cx - vb.x) * f, y: cy - (cy - vb.y) * f, w: vb.w * f, h: vb.h * f });
+              }}
+              title="Zoom in"
+              style={{
+                width: 36, height: 36, borderRadius: 10, border: '1px solid var(--line)',
+                background: 'var(--card)', color: 'var(--ink-soft)', display: 'grid', placeItems: 'center',
+                boxShadow: 'var(--shadow)', cursor: 'pointer',
+              }}
+            >＋</button>
+            <button
+              onClick={() => {
+                const vb = viewOverride ?? viewBox;
+                const { x: cx, y: cy } = { x: vb.x + vb.w / 2, y: vb.y + vb.h / 2 };
+                const f = 1.25;
+                setViewOverride({ x: cx - (cx - vb.x) * f, y: cy - (cy - vb.y) * f, w: vb.w * f, h: vb.h * f });
+              }}
+              title="Zoom out"
+              style={{
+                width: 36, height: 36, borderRadius: 10, border: '1px solid var(--line)',
+                background: 'var(--card)', color: 'var(--ink-soft)', display: 'grid', placeItems: 'center',
+                boxShadow: 'var(--shadow)', cursor: 'pointer',
+              }}
+            >−</button>
+            <button
+              onClick={resetView}
+              disabled={!viewOverride}
+              title="Ansicht zurücksetzen (Fit)"
+              style={{
+                width: 36, height: 36, borderRadius: 10, border: '1px solid var(--line)',
+                background: viewOverride ? 'var(--amber-bg)' : 'var(--card)',
+                color: viewOverride ? 'var(--amber-ink)' : 'var(--muted)',
+                display: 'grid', placeItems: 'center',
+                boxShadow: 'var(--shadow)', cursor: viewOverride ? 'pointer' : 'default',
+                opacity: viewOverride ? 1 : 0.5,
+              }}
+            >⌂</button>
+          </div>
 
           <div className="absolute bottom-4 right-4 bg-slate-900/95 backdrop-blur border border-slate-800 rounded-lg p-3 text-xs space-y-1.5">
             <div className="font-bold text-slate-300 mb-1">Legende</div>
