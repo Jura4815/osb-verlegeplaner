@@ -507,6 +507,16 @@ body {
   .mobile-stats-fab { display: inline-flex; }
   .mobile-stats-close { display: inline-flex; }
 
+  /* Legende über den FAB schieben, damit sie sich nicht überlagern.
+     FAB sitzt bei bottom:18px + height:50px → 68px Reservebereich → Legende ab 80px. */
+  .paper-theme .d-legend {
+    bottom: 84px !important;
+    right: 12px !important;
+    padding: 6px 8px !important;
+    font-size: 10px !important;
+  }
+  .paper-theme .d-legend > div:first-child { font-size: 10px; margin-bottom: 2px; }
+
   /* Inputs: 16 px verhindert iOS-Auto-Zoom beim Fokus */
   input[type="text"],
   input[type="number"],

@@ -2715,7 +2715,7 @@ export default function OSBPlaner() {
             >⌂</button>
           </div>
 
-          <div className="absolute bottom-4 right-4 bg-slate-900/95 backdrop-blur border border-slate-800 rounded-lg p-3 text-xs space-y-1.5">
+          <div className="d-legend absolute bottom-4 right-4 bg-slate-900/95 backdrop-blur border border-slate-800 rounded-lg p-3 text-xs space-y-1.5">
             <div className="font-bold text-slate-300 mb-1">Legende</div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded border-2 border-amber-400 bg-amber-400/10"></div>
