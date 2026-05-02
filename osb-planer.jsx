@@ -3,6 +3,7 @@ import {
   Trash2, Plus, Grid3x3, Package, Download, ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
   ArrowUpRight, ArrowUpLeft, ArrowDownRight, ArrowDownLeft, Edit3, Eye, Sliders, Wand2,
   CornerUpLeft, CornerUpRight, CornerDownLeft, CornerDownRight, RotateCw, Save, Upload,
+  MoreVertical,
 } from 'lucide-react';
 
 const STORAGE_KEY = 'osb-planer:last';
@@ -715,6 +716,7 @@ export default function OSBPlaner() {
   // Mobile-Layout: Sidebar als Drawer, Stat-Panel als Bottom-Sheet
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [mobileStatsOpen, setMobileStatsOpen] = useState(false);
+  const [topMenuOpen, setTopMenuOpen] = useState(false);
   // Pen-Modus: Click-to-add mit 45°-Snap und Live-Preview
   const [penMode, setPenMode] = useState(false);
   const [penCursor, setPenCursor] = useState(null);  // { x, y } in SVG-Userspace
@@ -1577,10 +1579,11 @@ export default function OSBPlaner() {
         </div>
 
         <div className="d-top-actions">
+          {/* Desktop-Buttons: ab >=600px sichtbar */}
           <button
             onClick={undo}
             disabled={historyRef.current.past.length < 2}
-            className="d-icon-btn"
+            className="d-icon-btn d-desktop-action"
             title="Rückgängig (⌘Z / Ctrl+Z)"
             style={{ opacity: historyRef.current.past.length < 2 ? 0.35 : 1 }}
           >
@@ -1589,15 +1592,15 @@ export default function OSBPlaner() {
           <button
             onClick={redo}
             disabled={historyRef.current.future.length === 0}
-            className="d-icon-btn"
+            className="d-icon-btn d-desktop-action"
             title="Wiederholen (⇧⌘Z / Ctrl+Shift+Z)"
             style={{ opacity: historyRef.current.future.length === 0 ? 0.35 : 1 }}
           >
             <RotateCw size={17} />
           </button>
-          <span style={{ width: 6 }} />
-          <button onClick={saveZeichnung} className="d-icon-btn" title="Zeichnung als JSON speichern"><Save size={17} /></button>
-          <button onClick={() => fileInputRef.current?.click()} className="d-icon-btn" title="JSON laden"><Upload size={17} /></button>
+          <span className="d-desktop-action" style={{ width: 6 }} />
+          <button onClick={saveZeichnung} className="d-icon-btn d-desktop-action" title="Zeichnung als JSON speichern"><Save size={17} /></button>
+          <button onClick={() => fileInputRef.current?.click()} className="d-icon-btn d-desktop-action" title="JSON laden"><Upload size={17} /></button>
           <input
             ref={fileInputRef}
             type="file"
@@ -1609,7 +1612,59 @@ export default function OSBPlaner() {
               e.target.value = '';
             }}
           />
-          <button onClick={exportSVG} className="d-btn primary" title="SVG exportieren"><Download size={15} /><span className="d-mobile-text">Drucken</span></button>
+          <button onClick={exportSVG} className="d-btn primary d-desktop-action" title="SVG exportieren"><Download size={15} /><span className="d-mobile-text">Drucken</span></button>
+
+          {/* Mobile Overflow-Menu */}
+          <div className="d-mobile-action" style={{ position: 'relative' }}>
+            <button
+              className="d-icon-btn"
+              onClick={() => setTopMenuOpen(v => !v)}
+              aria-label="Mehr"
+            >
+              <MoreVertical size={18} />
+            </button>
+            {topMenuOpen && (
+              <>
+                <div
+                  onClick={() => setTopMenuOpen(false)}
+                  style={{ position: 'fixed', inset: 0, zIndex: 49 }}
+                />
+                <div
+                  style={{
+                    position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+                    background: 'var(--paper)', border: '1px solid var(--line)',
+                    borderRadius: 'var(--r)', boxShadow: 'var(--shadow-lg)',
+                    minWidth: 200, zIndex: 50, padding: 6, display: 'flex', flexDirection: 'column', gap: 2,
+                  }}
+                >
+                  {[
+                    { label: 'Rückgängig', icon: <RotateCw size={15} style={{ transform: 'scaleX(-1)' }} />, action: undo, disabled: historyRef.current.past.length < 2 },
+                    { label: 'Wiederholen', icon: <RotateCw size={15} />, action: redo, disabled: historyRef.current.future.length === 0 },
+                    { label: 'Speichern', icon: <Save size={15} />, action: saveZeichnung },
+                    { label: 'Laden', icon: <Upload size={15} />, action: () => fileInputRef.current?.click() },
+                    { label: 'SVG exportieren', icon: <Download size={15} />, action: exportSVG },
+                  ].map((it, i) => (
+                    <button
+                      key={i}
+                      disabled={it.disabled}
+                      onClick={() => { setTopMenuOpen(false); it.action(); }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '10px 12px', borderRadius: 8,
+                        background: 'transparent', border: 'none',
+                        color: 'var(--ink)', textAlign: 'left',
+                        fontSize: 13, fontWeight: 500, cursor: 'pointer',
+                        opacity: it.disabled ? 0.35 : 1,
+                      }}
+                    >
+                      {it.icon}
+                      {it.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </header>
 

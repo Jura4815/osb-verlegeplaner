@@ -394,6 +394,10 @@ body {
 /* Hamburger sichtbar nur auf Mobile */
 .d-hamburger { display: none; }
 
+/* Topbar-Action-Visibility: per Default Desktop-Buttons sichtbar, Mobile-Overflow versteckt */
+.d-mobile-action { display: none; }
+.d-desktop-action { display: inline-flex; }
+
 /* Mobile-Sheet-Handle: Greifer fürs Hochziehen — default hidden, im Media-Query an */
 .mobile-sheet-handle {
   display: none; height: 32px; place-items: center;
@@ -414,22 +418,17 @@ body {
 
 @media (max-width: 768px) {
   /* === Topbar kompakt === */
-  .d-topbar { padding: 8px 10px; gap: 8px; flex-wrap: nowrap; }
+  .d-topbar { padding: 8px 10px; gap: 6px; flex-wrap: nowrap; }
   .d-brand-mark { width: 32px; height: 32px; font-size: 16px; border-radius: 8px; }
   .d-brand h1 { font-size: 15px; }
   .d-brand .d-sub { display: none; }
-  .d-mode-toggle { padding: 2px; }
+  .d-mode-toggle { padding: 2px; flex-shrink: 0; }
   .d-mode-toggle button { padding: 6px 10px; font-size: 12px; gap: 5px; }
   .d-mode-toggle svg { width: 13px; height: 13px; }
-  .d-top-actions { gap: 4px; }
-  .d-icon-btn { width: 36px; height: 36px; }
+  .d-top-actions { gap: 4px; flex-shrink: 0; }
+  .d-icon-btn { width: 36px; height: 36px; flex-shrink: 0; }
   .d-icon-btn svg { width: 16px; height: 16px; }
-  .d-btn { padding: 7px 10px; font-size: 12px; }
-  .d-btn.primary span,
-  .d-btn span { display: inline; }
-  /* "Drucken"-Text auf Mobile ausblenden, Icon bleibt */
-  .d-btn.primary { padding: 8px 10px; }
-  .d-btn.primary .d-mobile-text { display: none; }
+  .d-btn { padding: 7px 10px; font-size: 12px; flex-shrink: 0; }
 
   /* Hamburger sichtbar */
   .d-hamburger { display: grid; }
@@ -501,9 +500,16 @@ body {
   .mobile-statsheet .d-panel + .d-panel { border-top: 1px solid var(--line); }
 }
 
+/* === Overflow-Menu: ab <=600 statt einzelner Action-Buttons === */
+@media (max-width: 600px) {
+  .d-desktop-action { display: none !important; }
+  .d-mobile-action  { display: inline-flex !important; }
+  /* Brand-h1 + Tagline ausblenden, nur V-Mark bleibt */
+  .d-brand > div:not(.d-brand-mark) { display: none; }
+}
+
 /* Sehr kleine Geräte (<400 px) */
 @media (max-width: 400px) {
-  .d-brand h1 { font-size: 14px; }
   .d-mode-toggle button span { display: none; }   /* nur Icons */
   .d-mode-toggle button { padding: 6px 8px; }
   .d-icon-btn { width: 34px; height: 34px; }
