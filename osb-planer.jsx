@@ -3,7 +3,7 @@ import {
   Trash2, Plus, Grid3x3, Package, Download, ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
   ArrowUpRight, ArrowUpLeft, ArrowDownRight, ArrowDownLeft, Edit3, Eye, Sliders, Wand2,
   CornerUpLeft, CornerUpRight, CornerDownLeft, CornerDownRight, RotateCw, Save, Upload,
-  MoreVertical,
+  MoreVertical, AlertTriangle, CheckCircle, Layers, Ruler, Compass,
 } from 'lucide-react';
 
 const STORAGE_KEY = 'osb-planer:last';
@@ -1518,17 +1518,18 @@ export default function OSBPlaner() {
   }
 
   function plattenFarbe(row, isFull, ausRest) {
+    // Palette für hellen Glas-Canvas: kräftigere Sättigung + dunklere Stroke-Kanten
     const basisFarben = [
-      { fill: 'rgba(16,185,129,0.20)', stroke: '#10b981' },
-      { fill: 'rgba(59,130,246,0.20)', stroke: '#3b82f6' },
-      { fill: 'rgba(168,85,247,0.20)', stroke: '#a855f7' },
-      { fill: 'rgba(236,72,153,0.20)', stroke: '#ec4899' },
-      { fill: 'rgba(234,179,8,0.20)', stroke: '#eab308' },
-      { fill: 'rgba(14,165,233,0.20)', stroke: '#0ea5e9' },
+      { fill: 'rgba(22,163,74,0.32)',  stroke: '#15803d' },   // emerald
+      { fill: 'rgba(37,99,235,0.30)',  stroke: '#1d4ed8' },   // blue
+      { fill: 'rgba(168,85,247,0.30)', stroke: '#7e22ce' },   // violet
+      { fill: 'rgba(236,72,153,0.30)', stroke: '#be185d' },   // pink
+      { fill: 'rgba(217,119,6,0.32)',  stroke: '#b45309' },   // amber
+      { fill: 'rgba(8,145,178,0.30)',  stroke: '#0e7490' },   // cyan
     ];
     if (!isFull) {
-      if (ausRest) return { fill: 'rgba(249,115,22,0.20)', stroke: '#f97316' };  // orange = Zuschnitt aus Rest
-      return { fill: 'rgba(239,68,68,0.20)', stroke: '#ef4444' };                // rot = neuer Zuschnitt
+      if (ausRest) return { fill: 'rgba(234,88,12,0.34)',  stroke: '#c2410c' };  // orange = Zuschnitt aus Rest
+      return        { fill: 'rgba(220,38,38,0.30)',  stroke: '#b91c1c' };        // rot = neuer Zuschnitt
     }
     return basisFarben[row % basisFarben.length];
   }
@@ -1673,38 +1674,40 @@ export default function OSBPlaner() {
           className={`mobile-drawer-overlay ${mobileDrawerOpen ? 'open' : ''}`}
           onClick={() => setMobileDrawerOpen(false)}
         />
-        <aside className={`w-96 bg-slate-900 border-r border-slate-800 overflow-y-auto mobile-drawer-host ${mobileDrawerOpen ? 'open' : ''}`}>
+        <aside className={`w-96 gl-sidebar overflow-y-auto mobile-drawer-host ${mobileDrawerOpen ? 'open' : ''}`}>
 
           {mode === 'zeichnen' && (
             <>
-              <section className="p-4 border-b border-slate-800">
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-sm font-bold text-amber-400 flex items-center gap-2">
-                    <Edit3 size={16} /> Kanten definieren
-                  </h2>
-                  <div className="flex gap-1">
-                    <button onClick={presetRechteck} className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-[10px]">□ Rechteck</button>
-                    <button onClick={presetLForm} className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-[10px]">⌐ L-Form</button>
-                    <button onClick={presetSchraege} className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-[10px]">◢ Schräge</button>
+              <section className="gl-section">
+                <header className="gl-section-h">
+                  <span className="gl-num">1</span>
+                  <h3>Polygon zeichnen</h3>
+                  <div className="gl-h-actions">
+                    <button onClick={presetRechteck} className="gl-btn-mini" title="Rechteck-Preset">□</button>
+                    <button onClick={presetLForm} className="gl-btn-mini" title="L-Form-Preset">⌐</button>
+                    <button onClick={presetSchraege} className="gl-btn-mini" title="Schräge-Preset">◢</button>
                   </div>
-                </div>
+                </header>
 
-                <div className="space-y-1 mb-2">
-                  <div className="grid grid-cols-[20px_90px_1fr_24px_24px_24px] gap-1 text-[10px] text-slate-400 px-1 mb-1">
-                    <span>#</span><span>Länge (cm)</span><span>Richtung</span><span></span><span></span><span></span>
+                <div className="space-y-1 mb-3">
+                  <div className="grid grid-cols-[24px_1fr_1.4fr_22px_22px_22px] gap-1 px-1 mb-1">
+                    <span className="gl-label" style={{ marginBottom: 0 }}>#</span>
+                    <span className="gl-label" style={{ marginBottom: 0 }}>Länge cm</span>
+                    <span className="gl-label" style={{ marginBottom: 0 }}>Richtung</span>
+                    <span></span><span></span><span></span>
                   </div>
                   {kanten.map((k, i) => (
-                    <div key={i} className="grid grid-cols-[20px_90px_1fr_24px_24px_24px] gap-1 items-center">
-                      <span className="text-xs text-slate-500 font-mono">{i + 1}</span>
+                    <div key={i} className="grid grid-cols-[24px_1fr_1.4fr_22px_22px_22px] gap-1 items-center">
+                      <span className="gl-mono-pill">{i + 1}</span>
                       <input
                         type="number" step="0.1" value={k.laenge}
                         onChange={e => updateKante(i, 'laenge', parseFloat(e.target.value) || 0)}
-                        className="bg-slate-800 rounded px-2 py-1 text-xs font-mono w-full"
+                        className="gl-input gl-input-sm"
                       />
                       <select
                         value={k.richtung}
                         onChange={e => updateKante(i, 'richtung', e.target.value)}
-                        className="bg-slate-800 rounded px-1 py-1 text-xs w-full"
+                        className="gl-select gl-select-sm"
                       >
                         <optgroup label="90°">
                           <option value="rechts">→ rechts</option>
@@ -1719,94 +1722,113 @@ export default function OSBPlaner() {
                           <option value="links-hoch">↖ links-hoch</option>
                         </optgroup>
                       </select>
-                      <button onClick={() => moveKante(i, -1)} disabled={i === 0} className="p-1 hover:bg-slate-800 rounded disabled:opacity-30" title="Nach oben"><ArrowUp size={12} /></button>
-                      <button onClick={() => moveKante(i, 1)} disabled={i === kanten.length - 1} className="p-1 hover:bg-slate-800 rounded disabled:opacity-30" title="Nach unten"><ArrowDown size={12} /></button>
-                      <button onClick={() => removeKante(i)} className="p-1 hover:bg-red-900 rounded text-red-400" title="Löschen"><Trash2 size={12} /></button>
+                      <button onClick={() => moveKante(i, -1)} disabled={i === 0} className="gl-iconbtn" title="Nach oben"><ArrowUp size={12} /></button>
+                      <button onClick={() => moveKante(i, 1)} disabled={i === kanten.length - 1} className="gl-iconbtn" title="Nach unten"><ArrowDown size={12} /></button>
+                      <button onClick={() => removeKante(i)} className="gl-iconbtn danger" title="Löschen"><Trash2 size={12} /></button>
                     </div>
                   ))}
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                  <button onClick={addKante} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-xs font-bold flex items-center justify-center gap-2 text-white">
-                    <Plus size={12} /> Kante
+                <div className="grid grid-cols-2 gap-2 mt-3">
+                  <button onClick={addKante} className="gl-btn primary">
+                    <Plus size={13} /> Kante hinzufügen
                   </button>
                   <button
                     onClick={() => setPenMode(v => !v)}
-                    className={`px-3 py-1.5 rounded text-xs font-bold flex items-center justify-center gap-2 ${penMode ? 'bg-amber-600 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'}`}
+                    className={`gl-btn ${penMode ? 'amber' : ''}`}
                     title="Im Canvas klicken, um Punkte zu platzieren (Snap: 45° / 90°). ESC zum Beenden."
                   >
-                    <Edit3 size={12} /> {penMode ? 'Pen aktiv' : 'Pen-Modus'}
+                    <Edit3 size={13} /> {penMode ? 'Pen aktiv' : 'Pen-Modus'}
                   </button>
                 </div>
+
                 {penMode && (
-                  <div className="mt-2 px-3 py-2 rounded text-[11px]" style={{ background: 'var(--amber-bg)', color: 'var(--amber-ink)', border: '1px solid var(--amber)', lineHeight: 1.4 }}>
-                    ✏ <b>Klick</b> platziert Punkt (Snap auf 45°/90°). <br/>
-                    🔢 Während Preview <b>Zahl tippen</b> → exaktes Maß; <kbd>Enter</kbd> bestätigt.<br/>
+                  <div className="gl-hint" style={{ marginTop: 10 }}>
+                    ✏ <b>Klick</b> platziert Punkt (Snap auf 45°/90°)<br/>
+                    🔢 Während Preview <b>Zahl tippen</b> → exaktes Maß; <kbd>Enter</kbd> bestätigt<br/>
                     🖐 <b>Mittelklick</b> zum Pannen · <kbd>Esc</kbd> zum Beenden
                   </div>
                 )}
 
                 {gap.dist > 0.5 && (
-                  <div className="mt-3 bg-red-950/50 border border-red-700 rounded p-2 text-xs">
-                    <p className="font-bold text-red-400 mb-1">⚠ Polygon schließt nicht!</p>
-                    <p>Abstand zum Startpunkt: <span className="font-mono font-bold">{gap.dist.toFixed(1)} cm</span></p>
-                    <p className="text-slate-400 mt-1">Benötigt: <span className="font-mono">Δx={gap.dx.toFixed(1)}, Δy={gap.dy.toFixed(1)}</span></p>
-                    <button onClick={schliessePolygon} className="w-full mt-2 px-2 py-1.5 bg-red-800 hover:bg-red-700 rounded text-xs font-bold">
-                      Polygon automatisch schließen
-                    </button>
+                  <div className="gl-status-card warn">
+                    <AlertTriangle size={18} className="gl-status-ic" />
+                    <div className="gl-status-body">
+                      <div className="gl-status-title">Polygon schließt nicht</div>
+                      <p>Abstand zum Startpunkt: <span className="font-mono" style={{ color: 'inherit', fontWeight: 700 }}>{gap.dist.toFixed(1)} cm</span></p>
+                      <p>Benötigt: <span className="font-mono">Δx={gap.dx.toFixed(1)}, Δy={gap.dy.toFixed(1)}</span></p>
+                      <div className="gl-status-actions">
+                        <button onClick={schliessePolygon} className="gl-btn-mini danger" style={{ width: '100%' }}>
+                          Polygon automatisch schließen
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
                 {polygonGeschlossen && (
-                  <div className="mt-3 bg-emerald-950/50 border border-emerald-700 rounded p-2 text-xs">
-                    <p className="font-bold text-emerald-400">✓ Polygon geschlossen</p>
+                  <div className="gl-status-card ok">
+                    <CheckCircle size={18} className="gl-status-ic" />
+                    <div className="gl-status-body">
+                      <div className="gl-status-title">Polygon geschlossen</div>
+                      <p>Wechsle in den Parameter-Modus, um Material zu konfigurieren.</p>
+                    </div>
                   </div>
                 )}
               </section>
 
-              <section className="p-4 border-b border-slate-800">
-                <h2 className="text-sm font-bold text-amber-400 mb-3">🪵 Balken-Raster</h2>
-                <div className="space-y-3 text-xs">
-                  <label className="flex items-center gap-2 text-slate-300 pb-2 border-b border-slate-800">
-                    <input type="checkbox" checked={balkenAktiv} onChange={e => setBalkenAktiv(e.target.checked)} />
-                    Balken verwenden
-                  </label>
-                  <div className={balkenAktiv ? '' : 'opacity-40 pointer-events-none'}>
+              <section className="gl-section">
+                <header className="gl-section-h">
+                  <span className="gl-num">2</span>
+                  <h3>Balken-Raster</h3>
+                </header>
+
+                <label className="gl-checkbox-row" style={{ marginBottom: 8 }}>
+                  <input type="checkbox" checked={balkenAktiv} onChange={e => setBalkenAktiv(e.target.checked)} />
+                  Balken verwenden
+                  <span className="gl-cb-hint">Unterkonstruktion</span>
+                </label>
+
+                <div className={balkenAktiv ? 'gl-stack' : 'gl-stack opacity-40 pointer-events-none'}>
+                  <div>
+                    <label className="gl-label">Richtung</label>
+                    <div className="gl-segment">
+                      <button onClick={() => setBalkenRichtung('vertikal')} className={balkenRichtung === 'vertikal' ? 'on' : ''}>↕ Vertikal</button>
+                      <button onClick={() => setBalkenRichtung('horizontal')} className={balkenRichtung === 'horizontal' ? 'on' : ''}>↔ Horizontal</button>
+                    </div>
+                  </div>
+                  <div className="gl-row-2">
                     <div>
-                      <label className="block text-slate-400 mb-1">Richtung</label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button onClick={() => setBalkenRichtung('vertikal')} className={`px-2 py-2 rounded text-xs ${balkenRichtung === 'vertikal' ? 'bg-amber-600 font-bold' : 'bg-slate-800 hover:bg-slate-700'}`}>↕ Vertikal</button>
-                        <button onClick={() => setBalkenRichtung('horizontal')} className={`px-2 py-2 rounded text-xs ${balkenRichtung === 'horizontal' ? 'bg-amber-600 font-bold' : 'bg-slate-800 hover:bg-slate-700'}`}>↔ Horizontal</button>
-                      </div>
+                      <label className="gl-label">Breite (cm)</label>
+                      <input type="number" step="0.5" value={balkenBreite} onChange={e => setBalkenBreite(Number(e.target.value))} className="gl-input" />
                     </div>
-                    <div className="grid grid-cols-2 gap-2 mt-3">
-                      <div>
-                        <label className="block text-slate-400 mb-1">Breite (cm)</label>
-                        <input type="number" step="0.5" value={balkenBreite} onChange={e => setBalkenBreite(Number(e.target.value))} className="w-full bg-slate-800 rounded px-2 py-1 font-mono" />
-                      </div>
-                      <div>
-                        <label className="block text-slate-400 mb-1">Achsabstand (cm)</label>
-                        <input type="number" step="0.5" value={balkenAchs} onChange={e => setBalkenAchs(Number(e.target.value))} className="w-full bg-slate-800 rounded px-2 py-1 font-mono" />
-                      </div>
+                    <div>
+                      <label className="gl-label">Achsabstand (cm)</label>
+                      <input type="number" step="0.5" value={balkenAchs} onChange={e => setBalkenAchs(Number(e.target.value))} className="gl-input" />
                     </div>
-                    <div className="mt-3">
-                      <label className="block text-slate-400 mb-1">Offset: {balkenOffset} cm</label>
-                      <input type="range" min="0" max={balkenAchs} step="0.5" value={balkenOffset} onChange={e => setBalkenOffset(Number(e.target.value))} className="w-full" />
-                    </div>
+                  </div>
+                  <div>
+                    <label className="gl-label">Offset: <span className="gl-mono" style={{ color: 'var(--ink)' }}>{balkenOffset} cm</span></label>
+                    <input type="range" min="0" max={balkenAchs} step="0.5" value={balkenOffset}
+                      onChange={e => setBalkenOffset(Number(e.target.value))}
+                      className="gl-range"
+                      style={{ '--gl-fill': `${(balkenOffset / Math.max(balkenAchs, 1)) * 100}%` }} />
                   </div>
                 </div>
               </section>
 
-              <section className="p-4">
-                <h2 className="text-sm font-bold text-amber-400 mb-3">📐 Geometrie</h2>
-                <div className="space-y-2 text-xs">
-                  <StatRow label="Anzahl Kanten" value={kanten.length} />
-                  <StatRow label="Umfang" value={`${(umfang / 100).toFixed(2)} m`} />
-                  <StatRow label="Fläche" value={`${polygonFlaeche.toFixed(2)} m²`} highlight={polygonGeschlossen} />
-                  <StatRow label="Status" value={polygonGeschlossen ? 'geschlossen' : 'offen'} highlight={polygonGeschlossen} warn={!polygonGeschlossen} />
+              <section className="gl-section">
+                <header className="gl-section-h">
+                  <span className="gl-num">3</span>
+                  <h3>Geometrie</h3>
+                </header>
+                <div>
+                  <div className="gl-list-row"><span className="gl-list-lbl">Anzahl Kanten</span><span className="gl-list-val">{kanten.length}</span></div>
+                  <div className="gl-list-row"><span className="gl-list-lbl">Umfang</span><span className="gl-list-val">{(umfang / 100).toFixed(2)} m</span></div>
+                  <div className="gl-list-row"><span className="gl-list-lbl">Fläche</span><span className={`gl-list-val ${polygonGeschlossen ? 'good' : ''}`}>{polygonFlaeche.toFixed(2)} m²</span></div>
+                  <div className="gl-list-row"><span className="gl-list-lbl">Status</span><span className={`gl-list-val ${polygonGeschlossen ? 'good' : 'warn'}`}>{polygonGeschlossen ? 'geschlossen' : 'offen'}</span></div>
                   {polygonGeschlossen && (
-                    <div className="pt-2 mt-2 border-t border-slate-800 text-slate-400">
-                      Wechsle in den <span className="text-amber-400 font-bold">Parameter</span>-Modus,
-                      um Material und Verlegemuster zu konfigurieren.
+                    <div className="gl-hint" style={{ marginTop: 12 }}>
+                      Wechsle in den <b>Parameter</b>-Modus, um Material und Verlegemuster zu konfigurieren.
                     </div>
                   )}
                 </div>
@@ -1817,56 +1839,60 @@ export default function OSBPlaner() {
           {mode === 'parameter' && (
             <>
               {/* ============ 1. MATERIAL & MAßE ============ */}
-              <section className="p-4 border-b border-slate-800">
-                <h2 className="text-sm font-bold text-amber-400 mb-3 flex items-center gap-2">
-                  <Package size={16} /> {MATERIAL_LABEL[materialTyp]}
-                </h2>
-                <div className="space-y-3 text-xs">
-                  {/* 1. Kategorie */}
+              <section className="gl-section">
+                <header className="gl-section-h">
+                  <span className="gl-num">1</span>
+                  <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Package size={15} /> {MATERIAL_LABEL[materialTyp]}
+                  </h3>
+                </header>
+
+                <div className="gl-stack">
+                  {/* Kategorie */}
                   <div>
-                    <label className="block text-slate-400 mb-1">Kategorie</label>
-                    <div className="grid grid-cols-2 gap-1">
+                    <label className="gl-label">Kategorie</label>
+                    <div className="gl-segment-4">
                       {['osb', 'fliesen', 'diele', 'parkett'].map(m => (
                         <button
                           key={m}
                           onClick={() => applyMaterial(m)}
-                          className={`px-2 py-1.5 rounded text-[11px] ${materialTyp === m ? 'bg-amber-600 font-bold' : 'bg-slate-800 hover:bg-slate-700'}`}
+                          className={materialTyp === m ? 'on' : ''}
                         >
                           {MATERIAL_LABEL[m]}
                         </button>
                       ))}
                     </div>
                     {materialTyp !== 'fliesen' && (
-                      <label className="flex items-center gap-2 mt-2 text-slate-300">
+                      <label className="gl-checkbox-row" style={{ marginTop: 8 }}>
                         <input type="checkbox" checked={nutFederAktiv} onChange={e => setNutFederAktivSafe(e.target.checked)} />
                         {materialTyp === 'parkett' ? 'Klicksystem (N/F)' : 'Nut/Feder'}
-                        <span className="text-[10px] text-slate-500">— Maße = sichtbare Außenmaße</span>
+                        <span className="gl-cb-hint">Außenmaße</span>
                       </label>
                     )}
                   </div>
 
-                  {/* 2. Länge / Breite */}
-                  <div className="grid grid-cols-2 gap-2">
+                  {/* Länge / Breite */}
+                  <div className="gl-row-2">
                     <div>
-                      <label className="block text-slate-400 mb-1">Länge (cm)</label>
-                      <input type="number" step="0.1" value={plattenL} onChange={e => setPlattenL(Number(e.target.value))} className="w-full bg-slate-800 rounded px-2 py-1 font-mono" />
+                      <label className="gl-label">Länge (cm)</label>
+                      <input type="number" step="0.1" value={plattenL} onChange={e => setPlattenL(Number(e.target.value))} className="gl-input" />
                     </div>
                     <div>
-                      <label className="block text-slate-400 mb-1">Breite (cm)</label>
-                      <input type="number" step="0.1" value={plattenB} onChange={e => setPlattenB(Number(e.target.value))} className="w-full bg-slate-800 rounded px-2 py-1 font-mono" />
+                      <label className="gl-label">Breite (cm)</label>
+                      <input type="number" step="0.1" value={plattenB} onChange={e => setPlattenB(Number(e.target.value))} className="gl-input" />
                     </div>
                   </div>
 
-                  {/* 3. Presets */}
+                  {/* Presets */}
                   <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-slate-400">Presets</label>
+                    <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
+                      <label className="gl-label" style={{ marginBottom: 0 }}>Presets</label>
                       <button
                         onClick={savePreset}
-                        className="px-2 py-0.5 bg-emerald-700 hover:bg-emerald-600 rounded text-[10px] font-bold"
+                        className="gl-btn-mini success"
                         title="Aktuelle Maße als eigenes Preset speichern"
                       >
-                        + aktuell speichern
+                        <Plus size={11} /> aktuell
                       </button>
                     </div>
                     <div className="grid grid-cols-2 gap-1">
@@ -1874,27 +1900,22 @@ export default function OSBPlaner() {
                         <button
                           key={`std-${i}`}
                           onClick={() => { setPlattenL(p.l); setPlattenB(p.b); }}
-                          className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-[10px]"
+                          className={`gl-btn-mini ${plattenL === p.l && plattenB === p.b ? 'amber' : ''}`}
+                          style={{ justifyContent: 'flex-start', height: 28 }}
                         >
                           {p.label}
                         </button>
                       ))}
                       {(customPresets[materialTyp] || []).map((p, i) => (
-                        <div key={`cust-${i}`} className="relative group">
+                        <div key={`cust-${i}`} className="d-pill custom" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', padding: '6px 24px 6px 10px', textAlign: 'left', cursor: 'pointer', height: 28, borderRadius: 7 }}>
                           <button
                             onClick={() => { setPlattenL(p.l); setPlattenB(p.b); }}
-                            className="w-full text-left px-2 py-1 pr-5 bg-emerald-900/40 hover:bg-emerald-800/60 border border-emerald-700/50 rounded text-[10px] truncate"
                             title={`${p.l}×${p.b} cm — ${p.label}`}
+                            style={{ background: 'transparent', border: 'none', color: 'inherit', font: 'inherit', cursor: 'pointer', padding: 0, flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                           >
                             ★ {p.label}
                           </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); deletePreset(i); }}
-                            className="absolute right-1 top-1/2 -translate-y-1/2 text-red-400 hover:text-red-300 text-sm leading-none px-1"
-                            title="Preset löschen"
-                          >
-                            ×
-                          </button>
+                          <span className="gl-pill-x" onClick={(e) => { e.stopPropagation(); deletePreset(i); }} title="Preset löschen">×</span>
                         </div>
                       ))}
                     </div>
@@ -1903,8 +1924,8 @@ export default function OSBPlaner() {
                   {/* Fugenbreite (nur Fliesen/Diele ohne N/F-Klick) */}
                   {(materialTyp === 'fliesen' || (materialTyp === 'diele' && !nutFederAktiv)) && (
                     <div>
-                      <label className="block text-slate-400 mb-1">
-                        Fugenbreite: {(fugenBreite * 10).toFixed(1)} mm
+                      <label className="gl-label">
+                        Fugenbreite: <span className="gl-mono" style={{ color: 'var(--ink)' }}>{(fugenBreite * 10).toFixed(1)} mm</span>
                       </label>
                       <input
                         type="range"
@@ -1913,10 +1934,11 @@ export default function OSBPlaner() {
                         step="0.05"
                         value={fugenBreite}
                         onChange={e => setFugenBreite(Number(e.target.value))}
-                        className="w-full"
+                        className="gl-range"
+                        style={{ '--gl-fill': `${(fugenBreite / (materialTyp === 'diele' ? 1.5 : 1.0)) * 100}%` }}
                       />
                       {materialTyp === 'diele' && (
-                        <label className="flex items-center gap-2 mt-2">
+                        <label className="gl-checkbox-row" style={{ marginTop: 6 }}>
                           <input type="checkbox" checked={fugeQuerOnly} onChange={e => setFugeQuerOnly(e.target.checked)} />
                           Fuge nur zwischen Dielen
                         </label>
@@ -1924,54 +1946,68 @@ export default function OSBPlaner() {
                     </div>
                   )}
 
-                  {/* 4. Ausrichtung (nur wenn Balken aktiv) */}
+                  {/* Ausrichtung (nur wenn Balken aktiv) */}
                   {balkenAktiv && (
                     <div>
-                      <label className="block text-slate-400 mb-1">Ausrichtung (relativ zu Balken)</label>
-                      <div className="grid grid-cols-1 gap-1">
-                        <button onClick={() => setPlattenAusrichtung('laengs')} className={`px-2 py-1 rounded text-left ${plattenAusrichtung === 'laengs' ? 'bg-amber-600 font-bold' : 'bg-slate-800 hover:bg-slate-700'}`}>
-                          Länge ∥ Balken {materialTyp === 'osb' && '(empfohlen)'}
+                      <label className="gl-label">Ausrichtung (relativ zu Balken)</label>
+                      <div className="gl-segment">
+                        <button onClick={() => setPlattenAusrichtung('laengs')} className={plattenAusrichtung === 'laengs' ? 'on' : ''}>
+                          Länge ∥ Balken
                         </button>
-                        <button onClick={() => setPlattenAusrichtung('quer')} className={`px-2 py-1 rounded text-left ${plattenAusrichtung === 'quer' ? 'bg-amber-600 font-bold' : 'bg-slate-800 hover:bg-slate-700'}`}>
+                        <button onClick={() => setPlattenAusrichtung('quer')} className={plattenAusrichtung === 'quer' ? 'on' : ''}>
                           Länge ⊥ Balken
                         </button>
                       </div>
+                      {materialTyp === 'osb' && (
+                        <p className="gl-caption" style={{ marginTop: 4 }}>
+                          Empfohlen für OSB: Länge <b>∥</b> Balken
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
               </section>
 
               {/* ============ 2. POSITION (Anker-Offset + Rasterwinkel) ============ */}
-              <section className="p-4 border-b border-slate-800">
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-sm font-bold text-amber-400 flex items-center gap-2">
-                    <Sliders size={16} /> Position
-                  </h2>
-                  <button
-                    onClick={autoOptimize}
-                    disabled={isOptimizing}
-                    className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 rounded text-[10px] font-bold flex items-center gap-1"
-                    title="Offset + Versatz optimieren (min. Verschnitt)"
-                  >
-                    <Wand2 size={12} /> {isOptimizing ? 'Suche…' : 'Auto'}
-                  </button>
-                </div>
+              <section className="gl-section">
+                <header className="gl-section-h">
+                  <span className="gl-num">2</span>
+                  <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Sliders size={15} /> Position
+                  </h3>
+                  <div className="gl-h-actions">
+                    <button
+                      onClick={autoOptimize}
+                      disabled={isOptimizing}
+                      className="gl-btn-mini success"
+                      title="Offset + Versatz optimieren (min. Verschnitt)"
+                    >
+                      <Wand2 size={11} /> {isOptimizing ? 'Suche…' : 'Auto'}
+                    </button>
+                  </div>
+                </header>
 
-                <div className="space-y-3 text-xs">
-                  <p className="text-[10px] text-slate-500">
-                    Anker per <span className="text-emerald-400 font-bold">Drag&Drop</span> im Zeichnungs-Canvas verschieben (grünes Fadenkreuz).
-                  </p>
+                <div className="gl-stack">
+                  <div className="gl-hint" style={{ marginTop: 0 }}>
+                    Anker per <b>Drag &amp; Drop</b> im Canvas verschieben.
+                  </div>
 
                   <div>
-                    <label className="block text-slate-400 mb-1">Anker-Offset X (cm): {offsetX.toFixed(1)}</label>
-                    <input type="range" min="0" max={plattenDims.pW} step="0.5" value={Math.min(offsetX, plattenDims.pW)} onChange={e => setOffsetX(Number(e.target.value))} className="w-full" />
+                    <label className="gl-label">Anker-Offset X: <span className="gl-mono" style={{ color: 'var(--ink)' }}>{offsetX.toFixed(1)} cm</span></label>
+                    <input type="range" min="0" max={plattenDims.pW} step="0.5" value={Math.min(offsetX, plattenDims.pW)}
+                      onChange={e => setOffsetX(Number(e.target.value))}
+                      className="gl-range"
+                      style={{ '--gl-fill': `${(Math.min(offsetX, plattenDims.pW) / Math.max(plattenDims.pW, 1)) * 100}%` }} />
                   </div>
                   <div>
-                    <label className="block text-slate-400 mb-1">Anker-Offset Y (cm): {offsetY.toFixed(1)}</label>
-                    <input type="range" min="0" max={plattenDims.pH} step="0.5" value={Math.min(offsetY, plattenDims.pH)} onChange={e => setOffsetY(Number(e.target.value))} className="w-full" />
+                    <label className="gl-label">Anker-Offset Y: <span className="gl-mono" style={{ color: 'var(--ink)' }}>{offsetY.toFixed(1)} cm</span></label>
+                    <input type="range" min="0" max={plattenDims.pH} step="0.5" value={Math.min(offsetY, plattenDims.pH)}
+                      onChange={e => setOffsetY(Number(e.target.value))}
+                      className="gl-range"
+                      style={{ '--gl-fill': `${(Math.min(offsetY, plattenDims.pH) / Math.max(plattenDims.pH, 1)) * 100}%` }} />
                   </div>
-                  <div className="grid grid-cols-2 gap-1">
-                    <button onClick={() => { setOffsetX(0); setOffsetY(0); }} className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-[10px]">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={() => { setOffsetX(0); setOffsetY(0); }} className="gl-btn-mini">
                       Offsets zurücksetzen
                     </button>
                     <button
@@ -1979,26 +2015,32 @@ export default function OSBPlaner() {
                         const p1Idx = Number(startAnker.startsWith('punkt-') ? startAnker.slice(6) : 0);
                         alignToEdge(p1Idx);
                       }}
-                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-[10px]"
+                      className="gl-btn-mini"
                       title="Dreht Raster parallel zur Kante, die am Anker beginnt"
                     >
-                      ↻ Raster an Ankerkante
+                      <RotateCw size={11} /> Raster an Ankerkante
                     </button>
                   </div>
 
                   <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-slate-400">Rasterwinkel: {rasterwinkel.toFixed(1)}°</label>
-                      <button onClick={() => setRasterwinkel(0)} className="text-[10px] text-slate-500 hover:text-slate-300 flex items-center gap-1">
+                    <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
+                      <label className="gl-label" style={{ marginBottom: 0 }}>
+                        Rasterwinkel: <span className="gl-mono" style={{ color: 'var(--ink)' }}>{rasterwinkel.toFixed(1)}°</span>
+                      </label>
+                      <button onClick={() => setRasterwinkel(0)} className="gl-btn-mini ghost" style={{ height: 22, padding: '0 6px' }}>
                         <RotateCw size={10} /> 0°
                       </button>
                     </div>
-                    <input type="range" min="-45" max="45" step="0.5" value={rasterwinkel} onChange={e => setRasterwinkel(Number(e.target.value))} className="w-full" />
+                    <input type="range" min="-45" max="45" step="0.5" value={rasterwinkel}
+                      onChange={e => setRasterwinkel(Number(e.target.value))}
+                      className="gl-range"
+                      style={{ '--gl-fill': `${((rasterwinkel + 45) / 90) * 100}%` }} />
                     {points.length >= 3 && (
                       <select
                         onChange={e => { const v = e.target.value; if (v !== '') alignToEdge(Number(v)); e.target.value = ''; }}
-                        className="w-full bg-slate-800 rounded px-2 py-1 text-xs mt-1"
+                        className="gl-select gl-select-sm"
                         defaultValue=""
+                        style={{ marginTop: 6 }}
                       >
                         <option value="">⤴ An Polygon-Kante ausrichten…</option>
                         {points.map((p, i) => {
@@ -2013,50 +2055,55 @@ export default function OSBPlaner() {
               </section>
 
               {/* ============ 3. VERLEGEMUSTER (Icon-Grid) + Richtung ============ */}
-              <section className="p-4 border-b border-slate-800">
-                <h2 className="text-sm font-bold text-amber-400 mb-3 flex items-center gap-2">
-                  <Grid3x3 size={16} /> Verlegemuster
-                </h2>
-                <div className="space-y-3 text-xs">
-                  <div className="grid grid-cols-4 gap-1">
+              <section className="gl-section">
+                <header className="gl-section-h">
+                  <span className="gl-num">3</span>
+                  <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Grid3x3 size={15} /> Verlegemuster
+                  </h3>
+                </header>
+
+                <div className="gl-stack">
+                  <div className="gl-pattern-grid">
                     {[
                       { v: 'stapel',            l: 'Stapel' },
                       { v: 'halb',              l: 'Halbverband' },
                       { v: 'drittel',           l: 'Drittelverband' },
                       { v: 'rest',              l: 'Restverband' },
                       { v: 'fischgrat',         l: 'Fischgrät' },
-                      { v: 'fischgrat-doppelt', l: 'Doppel-Fischgrät' },
+                      { v: 'fischgrat-doppelt', l: 'Doppel' },
                       { v: 'fischgrat-franz',   l: 'Französisch' },
                     ].map(opt => (
                       <button
                         key={opt.v}
                         onClick={() => setVerlegemuster(opt.v)}
                         title={opt.l}
-                        className={`flex flex-col items-center justify-center gap-1 px-1 py-2 rounded border transition ${
-                          verlegemuster === opt.v
-                            ? 'bg-amber-600/20 border-amber-500 text-amber-300'
-                            : 'bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-400'
-                        }`}
+                        className={`gl-pattern-tile ${verlegemuster === opt.v ? 'on' : ''}`}
                       >
-                        <VerlegemusterIcon type={opt.v} size={28} />
-                        <span className="text-[9px] leading-tight text-center">{opt.l}</span>
+                        <VerlegemusterIcon type={opt.v} size={26} />
                       </button>
                     ))}
                   </div>
+                  <p className="gl-caption" style={{ marginTop: -2, textAlign: 'center' }}>
+                    {(() => {
+                      const labels = { stapel: 'Stapel', halb: 'Halbverband', drittel: 'Drittelverband', rest: 'Restverband', fischgrat: 'Fischgrät', 'fischgrat-doppelt': 'Doppelfischgrät', 'fischgrat-franz': 'Französisches Fischgrät' };
+                      return labels[verlegemuster] || '';
+                    })()}
+                  </p>
 
                   {/* Richtungs-Picker – Fischgrät vs. Standard */}
                   {verlegemuster.startsWith('fischgrat') ? (
                     <div>
-                      <label className="block text-slate-400 mb-1">Steigung</label>
-                      <div className="grid grid-cols-2 gap-1">
-                        <button onClick={() => setFischgratRichtung('rechts')} className={`px-2 py-1.5 rounded ${fischgratRichtung === 'rechts' ? 'bg-amber-600 font-bold' : 'bg-slate-800 hover:bg-slate-700'}`}>↗ Rechtssteigend</button>
-                        <button onClick={() => setFischgratRichtung('links')} className={`px-2 py-1.5 rounded ${fischgratRichtung === 'links' ? 'bg-amber-600 font-bold' : 'bg-slate-800 hover:bg-slate-700'}`}>↖ Linkssteigend</button>
+                      <label className="gl-label">Steigung</label>
+                      <div className="gl-segment">
+                        <button onClick={() => setFischgratRichtung('rechts')} className={fischgratRichtung === 'rechts' ? 'on' : ''}>↗ Rechtssteigend</button>
+                        <button onClick={() => setFischgratRichtung('links')} className={fischgratRichtung === 'links' ? 'on' : ''}>↖ Linkssteigend</button>
                       </div>
                     </div>
                   ) : (
                     <div>
-                      <label className="block text-slate-400 mb-1">Verlegerichtung</label>
-                      <div className="grid grid-cols-4 gap-1">
+                      <label className="gl-label">Verlegerichtung</label>
+                      <div className="gl-segment-4">
                         {[
                           { v: 'hoch',   l: '↑' },
                           { v: 'runter', l: '↓' },
@@ -2066,16 +2113,17 @@ export default function OSBPlaner() {
                           <button
                             key={opt.v}
                             onClick={() => setVerlegeRichtung(opt.v)}
-                            className={`px-2 py-1.5 rounded ${verlegeRichtung === opt.v ? 'bg-amber-600 font-bold' : 'bg-slate-800 hover:bg-slate-700'}`}
+                            className={verlegeRichtung === opt.v ? 'on' : ''}
+                            style={{ fontSize: 16 }}
                           >
                             {opt.l}
                           </button>
                         ))}
                       </div>
-                      <p className="text-[10px] text-slate-500 mt-1">
+                      <p className="gl-caption" style={{ marginTop: 4 }}>
                         {verlegeRichtung === 'hoch' || verlegeRichtung === 'runter'
-                          ? 'Spaltenweise verlegt — Reststück jeder Spalte startet die nächste.'
-                          : 'Reihenweise verlegt — Reststück jeder Reihe startet die nächste.'}
+                          ? 'Spaltenweise — Reststück jeder Spalte startet die nächste.'
+                          : 'Reihenweise — Reststück jeder Reihe startet die nächste.'}
                       </p>
                     </div>
                   )}
@@ -2086,8 +2134,9 @@ export default function OSBPlaner() {
                       ? balkenRichtung === 'vertikal'
                       : balkenRichtung === 'horizontal';
                     return (
-                      <div className="border-t border-slate-800 pt-3">
-                        <label className={`flex items-center gap-2 ${senkrecht ? 'text-slate-300' : 'text-slate-500'}`}>
+                      <div>
+                        <div className="gl-divider" />
+                        <label className="gl-checkbox-row" style={{ opacity: senkrecht ? 1 : 0.55 }}>
                           <input
                             type="checkbox"
                             checked={stoesseAufUk}
@@ -2096,7 +2145,7 @@ export default function OSBPlaner() {
                           />
                           Stöße auf Unterkonstruktion
                         </label>
-                        <p className="text-[10px] text-slate-500 mt-1">
+                        <p className="gl-caption" style={{ marginTop: 2, marginLeft: 8 }}>
                           {senkrecht
                             ? 'Plankenstöße werden exakt auf der letzten möglichen Balkenachse gekappt.'
                             : 'Nur verfügbar, wenn Planken senkrecht zu den Balken laufen.'}
@@ -2107,18 +2156,36 @@ export default function OSBPlaner() {
                 </div>
               </section>
 
-              <section className="p-4 border-b border-slate-800">
-                <h2 className="text-sm font-bold text-amber-400 mb-3 flex items-center gap-2">
-                  <Eye size={16} /> Anzeige
-                </h2>
-                <div className="space-y-2 text-xs">
-                  <label className="flex items-center gap-2"><input type="checkbox" checked={showBalken} onChange={e => setShowBalken(e.target.checked)} />Balken anzeigen</label>
-                  <label className="flex items-center gap-2"><input type="checkbox" checked={showPlatten} onChange={e => setShowPlatten(e.target.checked)} />Platten anzeigen</label>
-                  <label className="flex items-center gap-2"><input type="checkbox" checked={showPlattenNr} onChange={e => setShowPlattenNr(e.target.checked)} />Plattennummern</label>
+              <section className="gl-section">
+                <header className="gl-section-h">
+                  <span className="gl-num">4</span>
+                  <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Eye size={15} /> Anzeige
+                  </h3>
+                </header>
+                <div className="gl-toggle-list">
+                  <label className="gl-toggle-row">
+                    <span className="gl-toggle-lbl">Balken anzeigen</span>
+                    <input type="checkbox" checked={showBalken} onChange={e => setShowBalken(e.target.checked)} style={{ accentColor: 'var(--ink)', width: 16, height: 16 }} />
+                  </label>
+                  <label className="gl-toggle-row">
+                    <span className="gl-toggle-lbl">Platten anzeigen</span>
+                    <input type="checkbox" checked={showPlatten} onChange={e => setShowPlatten(e.target.checked)} style={{ accentColor: 'var(--ink)', width: 16, height: 16 }} />
+                  </label>
+                  <label className="gl-toggle-row">
+                    <span className="gl-toggle-lbl">Plattennummern</span>
+                    <input type="checkbox" checked={showPlattenNr} onChange={e => setShowPlattenNr(e.target.checked)} style={{ accentColor: 'var(--ink)', width: 16, height: 16 }} />
+                  </label>
                   {nutFederAktiv && (
-                    <label className="flex items-center gap-2"><input type="checkbox" checked={showNutFeder} onChange={e => setShowNutFeder(e.target.checked)} />Nut/Feder-Kanten</label>
+                    <label className="gl-toggle-row">
+                      <span className="gl-toggle-lbl">Nut/Feder-Kanten</span>
+                      <input type="checkbox" checked={showNutFeder} onChange={e => setShowNutFeder(e.target.checked)} style={{ accentColor: 'var(--ink)', width: 16, height: 16 }} />
+                    </label>
                   )}
-                  <label className="flex items-center gap-2"><input type="checkbox" checked={showLabels} onChange={e => setShowLabels(e.target.checked)} />Kantenlängen</label>
+                  <label className="gl-toggle-row">
+                    <span className="gl-toggle-lbl">Kantenlängen</span>
+                    <input type="checkbox" checked={showLabels} onChange={e => setShowLabels(e.target.checked)} style={{ accentColor: 'var(--ink)', width: 16, height: 16 }} />
+                  </label>
                 </div>
               </section>
 
@@ -2126,7 +2193,7 @@ export default function OSBPlaner() {
           )}
         </aside>
 
-        <main className="flex-1 bg-slate-950 relative overflow-hidden">
+        <main className="flex-1 gl-canvas-main relative overflow-hidden">
           <svg
             ref={svgRef}
             viewBox={`${effViewBox.x} ${effViewBox.y} ${effViewBox.w} ${effViewBox.h}`}
@@ -2147,10 +2214,10 @@ export default function OSBPlaner() {
           >
             <defs>
               <pattern id="grid10" width="10" height="10" patternUnits="userSpaceOnUse">
-                <circle cx="0" cy="0" r="0.5" fill="#8b7a5a" opacity="0.4" />
+                <circle cx="0" cy="0" r="0.4" fill="rgba(0,0,0,0.18)" />
               </pattern>
               <pattern id="grid100" width="100" height="100" patternUnits="userSpaceOnUse">
-                <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#a88b55" strokeWidth="0.5" opacity="0.35" />
+                <path d="M 100 0 L 0 0 0 100" fill="none" stroke="rgba(0,0,0,0.07)" strokeWidth="0.5" />
               </pattern>
               {rotPolygon.length >= 3 && (
                 <clipPath id="flaechen-clip-rot">
@@ -2163,7 +2230,7 @@ export default function OSBPlaner() {
             <rect x={viewBox.x} y={viewBox.y} width={viewBox.w} height={viewBox.h} fill="url(#grid100)" />
 
             {points.length >= 3 && (
-              <path d={polygonPath} fill="rgba(200,122,31,0.04)" stroke="#2a1f12" strokeWidth="2.5" strokeLinejoin="round" />
+              <path d={polygonPath} fill="rgba(255,255,255,0.30)" stroke="#1d1d1f" strokeWidth="2" strokeLinejoin="round" />
             )}
 
             <g transform={rotateTransform}>
@@ -2171,11 +2238,11 @@ export default function OSBPlaner() {
                 <g clipPath="url(#flaechen-clip-rot)">
                   {balken.map((b, i) => (
                     <g key={i}>
-                      <rect x={b.x} y={b.y} width={b.w} height={b.h} fill="rgba(180,83,9,0.35)" stroke="rgba(217,119,6,0.6)" strokeWidth="0.4" />
+                      <rect x={b.x} y={b.y} width={b.w} height={b.h} fill="rgba(139,90,43,0.30)" stroke="rgba(139,90,43,0.7)" strokeWidth="0.4" />
                       {balkenRichtung === 'vertikal' ? (
-                        <line x1={b.achse} y1={b.y} x2={b.achse} y2={b.y + b.h} stroke="rgba(217,119,6,0.8)" strokeWidth="0.3" strokeDasharray="4,2" />
+                        <line x1={b.achse} y1={b.y} x2={b.achse} y2={b.y + b.h} stroke="rgba(139,90,43,0.85)" strokeWidth="0.3" strokeDasharray="4,2" />
                       ) : (
-                        <line x1={b.x} y1={b.achse} x2={b.x + b.w} y2={b.achse} stroke="rgba(217,119,6,0.8)" strokeWidth="0.3" strokeDasharray="4,2" />
+                        <line x1={b.x} y1={b.achse} x2={b.x + b.w} y2={b.achse} stroke="rgba(139,90,43,0.85)" strokeWidth="0.3" strokeDasharray="4,2" />
                       )}
                     </g>
                   ))}
@@ -2192,23 +2259,23 @@ export default function OSBPlaner() {
                       const d = `M ${p.corners.map(c => `${c.x},${c.y}`).join(' L ')} Z`;
                       return (
                         <g key={p.id}>
-                          <path d={d} fill={farbe.fill} stroke={farbe.stroke} strokeWidth="2" />
+                          <path d={d} fill={farbe.fill} stroke={farbe.stroke} strokeWidth="1.6" />
                         </g>
                       );
                     }
                     return (
                       <g key={p.id}>
-                        <rect x={p.x} y={p.y} width={p.w} height={p.h} fill={farbe.fill} stroke={farbe.stroke} strokeWidth="2" />
+                        <rect x={p.x} y={p.y} width={p.w} height={p.h} fill={farbe.fill} stroke={farbe.stroke} strokeWidth="1.6" />
                         {showNutFeder && nutFederAktiv && p.isFull && (
                           isLandscape ? (
                             <>
-                              <line x1={p.x + 2} y1={p.y + 1.5} x2={p.x + p.w - 2} y2={p.y + 1.5} stroke="#fbbf24" strokeWidth="1" strokeDasharray="3,2" opacity="0.8" />
-                              <line x1={p.x + 2} y1={p.y + p.h - 1.5} x2={p.x + p.w - 2} y2={p.y + p.h - 1.5} stroke="#fbbf24" strokeWidth="1" strokeDasharray="3,2" opacity="0.8" />
+                              <line x1={p.x + 2} y1={p.y + 1.5} x2={p.x + p.w - 2} y2={p.y + 1.5} stroke="#d2691e" strokeWidth="1" strokeDasharray="3,2" opacity="0.7" />
+                              <line x1={p.x + 2} y1={p.y + p.h - 1.5} x2={p.x + p.w - 2} y2={p.y + p.h - 1.5} stroke="#d2691e" strokeWidth="1" strokeDasharray="3,2" opacity="0.7" />
                             </>
                           ) : (
                             <>
-                              <line x1={p.x + 1.5} y1={p.y + 2} x2={p.x + 1.5} y2={p.y + p.h - 2} stroke="#fbbf24" strokeWidth="1" strokeDasharray="3,2" opacity="0.8" />
-                              <line x1={p.x + p.w - 1.5} y1={p.y + 2} x2={p.x + p.w - 1.5} y2={p.y + p.h - 2} stroke="#fbbf24" strokeWidth="1" strokeDasharray="3,2" opacity="0.8" />
+                              <line x1={p.x + 1.5} y1={p.y + 2} x2={p.x + 1.5} y2={p.y + p.h - 2} stroke="#d2691e" strokeWidth="1" strokeDasharray="3,2" opacity="0.7" />
+                              <line x1={p.x + p.w - 1.5} y1={p.y + 2} x2={p.x + p.w - 1.5} y2={p.y + p.h - 2} stroke="#d2691e" strokeWidth="1" strokeDasharray="3,2" opacity="0.7" />
                             </>
                           )
                         )}
@@ -2229,10 +2296,10 @@ export default function OSBPlaner() {
                 const cym = (minY + maxY) / 2;
                 return (
                   <g key={`cut-${p.id}`} pointerEvents="none">
-                    <text x={cxm} y={minY + 9} textAnchor="middle" fontSize="8" fill="#fca5a5" fontFamily="monospace" fontWeight="bold">
+                    <text x={cxm} y={minY + 9} textAnchor="middle" fontSize="8" fill="#b91c1c" fontFamily="monospace" fontWeight="bold">
                       ↔ {cw.toFixed(1)}
                     </text>
-                    <text x={minX + 6} y={cym} textAnchor="middle" fontSize="8" fill="#fca5a5" fontFamily="monospace" fontWeight="bold"
+                    <text x={minX + 6} y={cym} textAnchor="middle" fontSize="8" fill="#b91c1c" fontFamily="monospace" fontWeight="bold"
                       transform={`rotate(-90 ${minX + 6} ${cym})`}>
                       ↕ {ch.toFixed(1)}
                     </text>
@@ -2249,9 +2316,9 @@ export default function OSBPlaner() {
               const farbe = plattenFarbe(p.row, p.isFull);
               return (
                 <g key={`lbl-${p.id}`} pointerEvents="none">
-                  <rect x={cx - 24} y={cy - 16} width="48" height="30" rx="4" fill="rgba(2,6,23,0.88)" stroke={farbe.stroke} strokeWidth="1" />
+                  <rect x={cx - 24} y={cy - 16} width="48" height="30" rx="6" fill="rgba(255,255,255,0.92)" stroke={farbe.stroke} strokeWidth="1.2" />
                   <text x={cx} y={cy - 3} textAnchor="middle" fontSize="13" fill={farbe.stroke} fontFamily="monospace" fontWeight="bold">#{p.id}</text>
-                  <text x={cx} y={cy + 9} textAnchor="middle" fontSize="8" fill="#94a3b8" fontFamily="monospace">
+                  <text x={cx} y={cy + 9} textAnchor="middle" fontSize="8" fill="#6e6e73" fontFamily="monospace">
                     {p.isFull ? 'voll' : `${(p.area / 10000).toFixed(2)}m²`}
                   </text>
                 </g>
@@ -2262,21 +2329,21 @@ export default function OSBPlaner() {
               const isAnker = startAnker === `punkt-${i}`;
               return (
                 <g key={`pt-${i}`}>
-                  <circle cx={p.x} cy={p.y} r={isAnker ? 7 : 5} fill={isAnker ? '#10b981' : '#fbbf24'} stroke="#020617" strokeWidth="2" />
-                  <text x={p.x} y={p.y - 10} textAnchor="middle" fontSize="10" fill={isAnker ? '#10b981' : '#fbbf24'} fontFamily="monospace" fontWeight="bold">P{i + 1}</text>
+                  <circle cx={p.x} cy={p.y} r={isAnker ? 7 : 5} fill={isAnker ? '#16a34a' : '#d2691e'} stroke="#fff" strokeWidth="2" />
+                  <text x={p.x} y={p.y - 10} textAnchor="middle" fontSize="10" fill={isAnker ? '#16a34a' : '#1d1d1f'} fontFamily="monospace" fontWeight="bold">P{i + 1}</text>
                 </g>
               );
             })}
 
             {mode === 'parameter' && anchorDisplay && (() => {
               const dragging = !!ankerDrag;
-              const color = dragging ? '#fbbf24' : '#10b981';
+              const color = dragging ? '#d2691e' : '#16a34a';
               const pos = dragging && ankerDrag.snapCandidate ? ankerDrag.snapCandidate : anchorDisplay;
               return (
                 <g>
                   {/* Snap-Kandidaten während Drag hervorheben */}
                   {dragging && bounds && (
-                    <g pointerEvents="none" opacity="0.6">
+                    <g pointerEvents="none" opacity="0.7">
                       {[
                         { x: bounds.minX, y: bounds.minY },
                         { x: bounds.maxX, y: bounds.minY },
@@ -2284,14 +2351,14 @@ export default function OSBPlaner() {
                         { x: bounds.maxX, y: bounds.maxY },
                         ...points,
                       ].map((c, i) => (
-                        <circle key={i} cx={c.x} cy={c.y} r="6" fill="none" stroke="#fbbf24" strokeWidth="1" strokeDasharray="2,2" />
+                        <circle key={i} cx={c.x} cy={c.y} r="6" fill="rgba(210,105,30,0.15)" stroke="#d2691e" strokeWidth="1" strokeDasharray="2,2" />
                       ))}
                     </g>
                   )}
-                  <g pointerEvents="none">
-                    <circle cx={pos.x} cy={pos.y} r="9" fill="none" stroke={color} strokeWidth="2" strokeDasharray="3,2" />
-                    <line x1={pos.x - 14} y1={pos.y} x2={pos.x + 14} y2={pos.y} stroke={color} strokeWidth="1.2" />
-                    <line x1={pos.x} y1={pos.y - 14} x2={pos.x} y2={pos.y + 14} stroke={color} strokeWidth="1.2" />
+                  <g pointerEvents="none" filter="drop-shadow(0 0 3px rgba(255,255,255,0.9))">
+                    <circle cx={pos.x} cy={pos.y} r="9" fill="rgba(255,255,255,0.4)" stroke={color} strokeWidth="2.2" strokeDasharray="3,2" />
+                    <line x1={pos.x - 14} y1={pos.y} x2={pos.x + 14} y2={pos.y} stroke={color} strokeWidth="1.5" />
+                    <line x1={pos.x} y1={pos.y - 14} x2={pos.x} y2={pos.y + 14} stroke={color} strokeWidth="1.5" />
                     <text x={pos.x + 12} y={pos.y - 12} fontSize="10" fill={color} fontFamily="monospace" fontWeight="bold">
                       {dragging ? '⤧ Anker' : 'Anker'}
                     </text>
@@ -2313,15 +2380,15 @@ export default function OSBPlaner() {
             })()}
 
             {gap.dist > 0.5 && points.length >= 2 && (
-              <line x1={points[points.length - 1].x} y1={points[points.length - 1].y} x2={points[0].x} y2={points[0].y} stroke="#ef4444" strokeWidth="2" strokeDasharray="6,3" />
+              <line x1={points[points.length - 1].x} y1={points[points.length - 1].y} x2={points[0].x} y2={points[0].y} stroke="#dc2626" strokeWidth="2" strokeDasharray="6,3" />
             )}
 
             {/* Pen-Modus: Start-Marker + Preview-Linie + Live-Maß */}
             {penMode && (
               <g pointerEvents="none">
                 {/* Start-Punkt (Fadenkreuz) */}
-                <circle cx={penStart.x} cy={penStart.y} r="6" fill="none" stroke="#c87a1f" strokeWidth="2" />
-                <circle cx={penStart.x} cy={penStart.y} r="2.5" fill="#c87a1f" />
+                <circle cx={penStart.x} cy={penStart.y} r="6" fill="rgba(255,255,255,0.5)" stroke="#d2691e" strokeWidth="2" />
+                <circle cx={penStart.x} cy={penStart.y} r="2.5" fill="#d2691e" />
                 {penDisplay && (() => {
                   const midX = (penStart.x + penDisplay.endX) / 2;
                   const midY = (penStart.y + penDisplay.endY) / 2;
@@ -2715,43 +2782,43 @@ export default function OSBPlaner() {
             >⌂</button>
           </div>
 
-          <div className="d-legend absolute bottom-4 right-4 bg-slate-900/95 backdrop-blur border border-slate-800 rounded-lg p-3 text-xs space-y-1.5">
-            <div className="font-bold text-slate-300 mb-1">Legende</div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded border-2 border-amber-400 bg-amber-400/10"></div>
+          <div className="gl-legend absolute bottom-4 right-4">
+            <div className="gl-legend-title">Legende</div>
+            <div className="gl-legend-row">
+              <div className="gl-legend-swatch" style={{ color: '#c87a1f', background: 'rgba(200,122,31,0.10)' }}></div>
               <span>Fläche</span>
             </div>
             {mode === 'parameter' && (
               <>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded" style={{ backgroundColor: 'rgba(180,83,9,0.45)', border: '1px solid rgba(217,119,6,0.6)' }}></div>
+                <div className="gl-legend-row">
+                  <div className="gl-legend-swatch" style={{ color: 'var(--wood)', background: 'rgba(139,90,43,0.30)', borderWidth: 1 }}></div>
                   <span>Balken</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded border-2 border-emerald-500 bg-emerald-500/15"></div>
+                <div className="gl-legend-row">
+                  <div className="gl-legend-swatch" style={{ color: 'var(--green)', background: 'rgba(22,163,74,0.18)' }}></div>
                   <span>Volle Platte</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded border-2 border-red-500 bg-red-500/15"></div>
-                  <span>Zuschnitt (neue Platte)</span>
+                <div className="gl-legend-row">
+                  <div className="gl-legend-swatch" style={{ color: 'var(--red)', background: 'rgba(220,38,38,0.18)' }}></div>
+                  <span>Zuschnitt (neu)</span>
                 </div>
                 {resteNutzen && (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded border-2 border-orange-500 bg-orange-500/15"></div>
+                  <div className="gl-legend-row">
+                    <div className="gl-legend-swatch" style={{ color: 'var(--orange)', background: 'rgba(234,88,12,0.18)' }}></div>
                     <span>Zuschnitt aus Rest</span>
                   </div>
                 )}
                 {showNutFeder && (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-0.5" style={{ background: 'repeating-linear-gradient(to right, #fbbf24 0 3px, transparent 3px 5px)' }}></div>
+                  <div className="gl-legend-row">
+                    <div style={{ width: 16, height: 2, background: 'repeating-linear-gradient(to right, var(--amber) 0 3px, transparent 3px 5px)' }}></div>
                     <span>Nut/Feder-Kante</span>
                   </div>
                 )}
               </>
             )}
             {mode === 'zeichnen' && (
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-amber-400 border-2 border-slate-950"></div>
+              <div className="gl-legend-row">
+                <div className="gl-legend-swatch dot" style={{ color: 'var(--amber)', background: 'var(--amber)' }}></div>
                 <span>Eckpunkt</span>
               </div>
             )}
@@ -2764,9 +2831,9 @@ export default function OSBPlaner() {
 
 function StatRow({ label, value, highlight, warn }) {
   return (
-    <div className="flex items-center justify-between">
-      <span className="text-slate-400">{label}:</span>
-      <span className={`font-mono font-bold ${warn ? 'text-red-400' : highlight ? 'text-emerald-400' : 'text-slate-100'}`}>
+    <div className="gl-list-row">
+      <span className="gl-list-lbl">{label}</span>
+      <span className={`gl-list-val ${warn ? 'warn' : highlight ? 'good' : ''}`}>
         {value}
       </span>
     </div>
